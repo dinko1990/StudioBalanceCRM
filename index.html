@@ -56,6 +56,27 @@ input,select,textarea{width:100%;padding:12px;border-radius:12px;border:1px soli
 .nm{font-size:17px;font-weight:700}.fun{border-radius:10px;padding:2px 4px}
 .cols{display:flex;gap:10px;overflow-x:auto;padding-bottom:8px}.col{min-width:260px;flex:1;padding:4px;border-radius:12px}.col h3{font-size:14px;color:var(--mut);margin:0 0 8px}
 table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:10px 8px;text-align:start;border-bottom:1px solid var(--line);white-space:nowrap}th{color:var(--mut);font-weight:500}tr.r{cursor:pointer}tr.r:hover{background:var(--pri2)}
+:root{--good:#15803d}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--good:#4ade80}}
+.bad{color:var(--bad)}.good{color:var(--good)}
+.tag.won{background:rgba(22,163,74,.15);color:var(--good);border-color:transparent}
+.chip[data-s="closed"]{color:var(--good);border-color:var(--good)}.chip[data-s="closed"].on{background:var(--good);color:#fff}
+.btn[onclick$="'closed')"]{color:var(--good);border-color:var(--good)}.btn[onclick$="'closed')"].on{background:rgba(22,163,74,.15)}
+.col[data-s="closed"]{background:rgba(22,163,74,.07)}.col[data-s="closed"] h3{color:var(--good)}
+.fun.won .b{background:var(--good)}
+/* scrollers */
+.cards{overflow-y:auto;max-height:calc(100dvh - 210px);align-content:start;padding:2px}
+.cols{overflow:auto;max-height:calc(100dvh - 210px)}
+.tw{overflow:auto;max-height:calc(100dvh - 210px);padding:0}
+@media(max-width:760px){.cards,.cols,.tw{max-height:calc(100dvh - 300px)}}
+/* Excel-like table */
+.tw th{position:sticky;top:0;background:var(--card);z-index:2}
+.tw tr.flt th{top:41px;padding:3px}
+.tw th:first-child,.tw td:first-child{position:sticky;inset-inline-start:0;background:var(--card);z-index:1}
+.tw th:first-child{z-index:3}
+.xl td,.xl th{border:1px solid var(--line)}.xl td{padding:0}
+.xl td input,.xl td select,.xl .flt input,.xl .flt select{margin:0;border:0;border-radius:0;background:transparent;padding:8px;min-width:110px;width:100%}
+.xl td input:focus,.xl td select:focus{outline:2px solid var(--pri);outline-offset:-2px;background:var(--pri2)}
 </style>
 </head>
 <body><div class="wrap" id="app"></div><div id="m"></div>
@@ -347,6 +368,138 @@ if(db&&db.importRows){db.importRows(fresh).then(done);return}
 fresh.forEach(x=>{L.push(x);if(db){const{id,...o}=x;db.collection('leads').doc(id).set(o).catch(()=>{})}});
 if(!db)try{localStorage.setItem(LS,JSON.stringify(L))}catch(e){}
 draw();done(fresh.length)}
+/* ===== v2: heat, tasks, Excel table, audit ===== */
+let H={hot:14,warm:30},AU=[],cfl={};
+try{H={...H,...JSON.parse(localStorage.getItem('sb_heat'))}}catch(e){}
+const HI={hot:'🔥',warm:'🌤',cold:'❄️'},HN={hot:'חם',warm:'פושר',cold:'קר'},DAYS=['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];
+const lc=(d=new Date())=>new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10);
+const hd=l=>Math.max(0,Math.floor((Date.now()-new Date((l.upd||l.date)+'T12:00:00'))/864e5));
+const hk=l=>!OPEN.includes(l.stage)?'':hd(l)<=H.hot?'hot':hd(l)<=H.warm?'warm':'cold';
+const tcl=x=>x==='lost'?'lost':x==='closed'?'won':['followup','dead'].includes(x)?'x':'';
+const fm=l=>filt==='all'?l.stage!=='dead':filt.includes(':')?hk(l)===filt.slice(2):l.stage===filt;
+function heat(l){if(l.stage==='closed')return '<div class="good" style="margin-top:4px">✅ סגירה</div>';const k=hk(l);if(!k)return '';const d=hd(l);return `<div class="mut" style="margin-top:4px">${HI[k]} ${HN[k]} · ${d?'לפני '+d+' ימים':'היום'}</div>`}
+
+// ---- audit
+const LBL={name:'שם',phone:'טלפון',src:'מקור',date:'תאריך',stage:'שלב',note:'תיעוד',reason:'סיבה',tDate:'תאריך ניסיון',tTime:'שעת ניסיון'};
+function diff(o,n){if(!o)return '';const d=[];
+  for(const k in LBL)if((o[k]||'')!==(n[k]||''))d.push(LBL[k]+': '+(k==='stage'?SN[o[k]]+' → '+SN[n[k]]:k==='note'?'עודכן':(o[k]||'∅')+' → '+(n[k]||'∅')));
+  F.forEach(f=>{const a=(o.cf||{})[f.id]??'',b=(n.cf||{})[f.id]??'';if(a!==b)d.push(f.name+': '+(a||'∅')+' → '+(b||'∅'))});return d.join(' | ')}
+function aud(a,l,d){if(!sb||!ME)return;sb.from('audit_log').insert({org_id:ME.org,user_id:ME.uid,email:ME.email||'',action:a,lead_id:l?l.id:null,lead_name:l?l.name:null,details:d||null}).then(({error})=>{if(error)console.warn('audit',error.message)})}
+function save(l){const i=L.findIndex(x=>x.id===l.id),o=i<0?null:L[i],d=diff(o,l);l.upd=iso();i<0?L.push(l):L[i]=l;
+  if(db){const{id,...r}=l;db.collection('leads').doc(id).set(r).catch(()=>{})}else try{localStorage.setItem(LS,JSON.stringify(L))}catch(e){}
+  if(!o)aud('ליד חדש',l);else if(d)aud('עדכון ליד',l,d)}
+function put(l){save(l);draw()}
+const _s=startSb;startSb=async function(){await _s();if(!ME||ME.email)return;
+  try{const{data:{user}}=await sb.auth.getUser();ME.email=user.email;const{data:o}=await sb.from('orgs').select('heat').eq('id',ME.org).single();if(o&&o.heat)H={...H,...o.heat}}catch(e){}
+  aud('התחברות');draw()};
+const _a=addF;addF=function(){const n=F.length;_a();if(F.length>n)aud('הוספת שדה',null,F[F.length-1].name)};
+const _d=delF;delF=function(id){const f=F.find(x=>x.id===id),n=F.length;_d(id);if(f&&F.length<n)aud('מחיקת שדה',null,f.name)};
+const _i=doImp;doImp=function(){const t=($('#ix').value||'').split('\n').length;_i();aud('ייבוא לידים',null,'שורות בקובץ: '+t)};
+const _e=exportCSV;exportCSV=function(){aud('ייצוא CSV',null,L.length+' לידים');return _e()};
+async function addInvite(){const email=$('#ie').value.trim().toLowerCase(),role=$('#ir').value;if(!email)return;
+  const{error}=await sb.from('invites').insert({org_id:ME.org,email,role});
+  if(error)return alert(error.code==='23505'?'כבר הוזמן אימייל זה':'שגיאה: '+error.message);aud('הזמנת משתמש',null,email+' · '+role);loadUsers()}
+async function rmInvite(id){await sb.from('invites').delete().eq('id',id);aud('ביטול הזמנה');loadUsers()}
+async function rmMember(u){if(!confirm('להסיר את המשתמש? הוא לא יוכל להיכנס יותר.'))return;
+  const{error}=await sb.from('memberships').delete().eq('org_id',ME.org).eq('user_id',u);if(error)alert(error.message);else aud('הסרת משתמש',null,u);loadUsers()}
+async function loadAudit(){const{data,error}=await sb.from('audit_log').select('*').eq('org_id',ME.org).order('created_at',{ascending:false}).limit(500);
+  const el=$('#aur');if(!el)return;if(error){el.innerHTML=`<tr><td colspan="5">${esc(error.message)}</td></tr>`;return}
+  AU=data;$('#auu').innerHTML='<option value="">כל המשתמשים</option>'+[...new Set(AU.map(a=>a.email))].map(e=>`<option>${esc(e)}</option>`).join('');auRows()}
+function auRows(){const u=$('#auu').value,s=$('#aus').value.toLowerCase();
+  const R=AU.filter(a=>(!u||a.email===u)&&(!s||((a.lead_name||'')+(a.details||'')+a.action).toLowerCase().includes(s)));
+  $('#aur').innerHTML=R.map(a=>`<tr><td>${new Date(a.created_at).toLocaleString('he-IL')}</td><td>${esc(a.email)}</td><td>${esc(a.action)}</td><td>${esc(a.lead_name||'')}</td><td style="white-space:normal">${esc(a.details||'')}</td></tr>`).join('')||'<tr><td colspan="5" class="empty">אין רשומות</td></tr>'}
+
+// ---- tasks (computed from today's date)
+function tasks(){const t=lc(),tm=lc(new Date(Date.now()+864e5)),O=L.filter(l=>OPEN.includes(l.stage)),G=[];
+  const add=(ic,title,hint,arr)=>{if(arr.length)G.push({ic,title,hint,arr})};
+  add('🔔','שיעורי ניסיון היום','שלח תזכורת קצרה בוואטסאפ',O.filter(l=>l.tDate===t));
+  add('📅','שיעורי ניסיון מחר','אשר הגעה ושלח כתובת',O.filter(l=>l.tDate===tm));
+  add('❓','עבר מועד השיעור ולא עודכן','האם הגיע? עדכן ל״אימון בפועל״ או ל״כשלון״',O.filter(l=>l.stage==='booked'&&l.tDate&&l.tDate<t));
+  add('📞','לידים חדשים שמחכים לשיחה','התקשר היום, הוותיקים ראשונים',O.filter(l=>l.stage==='new').sort((a,b)=>(a.date||'').localeCompare(b.date||'')));
+  add('📲','דיברנו, עדיין לא נקבע שיעור','הצע מועד לשיעור ניסיון',O.filter(l=>l.stage==='phone'&&hd(l)>=1));
+  add('🏁','התאמנו ולא סגרו','הצעת מנוי תוך 48 שעות מהאימון',O.filter(l=>l.stage==='attended'&&hd(l)>=1));
+  add('🔁','צריך לחזור אליהם','',L.filter(l=>l.stage==='followup'));
+  add('⏳','עומדים להתקרר','ניסיון אחרון לפני שהליד הופך קר',O.filter(l=>hk(l)==='warm'&&hd(l)>H.warm-4));
+  return G}
+function tasksHtml(){const G=tasks(),n=new Date();
+  return `<h1>משימות ליום ${DAYS[n.getDay()]} ${fd(lc())}</h1>${n.getDay()===6?'<p class="mut">שבת: אפשר להכין את רשימת השיחות ליום ראשון.</p>':''}`+
+  (G.map(g=>`<div class="card"><h2 style="margin:0">${g.ic} ${g.title} (${g.arr.length})</h2>${g.hint?`<div class="mut" style="margin:4px 0 8px">${g.hint}</div>`:''}${g.arr.slice(0,30).map(l=>`<div class="row" style="padding:8px 0;border-top:1px solid var(--line)"><span onclick="openL('${l.id}')" style="cursor:pointer;flex:1"><b>${esc(l.name)}</b> <span class="mut">${esc(l.phone)}${l.tDate?' · '+fd(l.tDate)+' '+esc(l.tTime||''):''}${hk(l)?' · '+HI[hk(l)]:''}</span></span><a class="btn" href="tel:${esc(l.phone)}">📞</a></div>`).join('')}${g.arr.length>30?`<div class="mut">ועוד ${g.arr.length-30}…</div>`:''}</div>`).join('')||'<div class="empty">אין משימות להיום 🎉</div>')}
+
+// ---- fields + heat settings
+function fieldsM(){const can=!sb||(ME&&ME.role!=='member'),nl=L.length,hc=k=>L.filter(l=>hk(l)===k).length;
+  const stt=f=>{const v=L.map(l=>(l.cf||{})[f.id]).filter(x=>x!==undefined&&x!=='');let e='';
+    if(f.type==='choice'){const m={};v.forEach(x=>m[x]=(m[x]||0)+1);e=' · '+Object.entries(m).map(([a,b])=>esc(a)+' '+b).join(', ')}
+    return `מולא ב-${v.length} מתוך ${nl}${e}`};
+  modal(`<h2>שדות והגדרות</h2>
+  <div class="card"><b>הוספת שדה</b><input id="fn" placeholder="שם השדה (למשל: גיל)"><select id="ft"><option value="text">טקסט</option><option value="number">מספר</option><option value="date">תאריך</option><option value="choice">בחירה מרשימה</option></select><input id="fo" placeholder="לבחירה מרשימה: אפשרויות מופרדות בפסיקים"><button class="btn pri full" onclick="addF()">הוספת שדה</button></div>
+  <div class="card"><b>הגדרת חום ליד</b><div class="mut">לפי ימים מהפעילות האחרונה. סגירה היא חיובית ולא מתקררת.</div>
+  <div class="g"><div><div class="mut">🔥 חם: עד (ימים)</div><input id="hh" type="number" min="1" value="${H.hot}" ${can?'':'disabled'}></div><div><div class="mut">🌤 פושר: עד (ימים)</div><input id="hw" type="number" min="2" value="${H.warm}" ${can?'':'disabled'}></div></div>
+  <div class="mut" style="margin-top:6px">❄️ קר: מעל זה. כרגע: 🔥 ${hc('hot')} · 🌤 ${hc('warm')} · ❄️ ${hc('cold')}</div>${can?'<button class="btn pri full" onclick="saveH()">שמירת הגדרות חום</button>':''}</div>
+  <div class="card"><b>המצב הנוכחי</b> <span class="mut">(${F.length} שדות · ${nl} לידים)</span>${F.map(f=>`<div class="row" style="padding:8px 0;border-top:1px solid var(--line)"><span><b>${esc(f.name)}</b> <span class="mut">${{text:'טקסט',number:'מספר',date:'תאריך',choice:'בחירה'}[f.type]}</span><div class="mut">${stt(f)}</div></span><button class="btn" style="color:var(--bad)" onclick="delF('${f.id}')">מחיקה</button></div>`).join('')||'<div class="mut">עדיין אין שדות.</div>'}</div>`)}
+async function saveH(){const h=+$('#hh').value,w=+$('#hw').value;if(!(h>=1&&w>h)){alert('ימי "פושר" חייבים להיות גדולים מימי "חם"');return}
+  H={hot:h,warm:w};try{localStorage.setItem('sb_heat',JSON.stringify(H))}catch(e){}
+  if(sb&&ME){const{error}=await sb.from('orgs').update({heat:H}).eq('id',ME.org);if(error)alert('השמירה נכשלה: '+error.message);else aud('שינוי הגדרות חום',null,`חם עד ${h}, פושר עד ${w}`)}
+  draw();fieldsM()}
+
+// ---- list + Excel-like table
+function list(){if(L.length){if(view==='board')return board();if(view==='table')return table()}
+  const R=L.filter(l=>fm(l)&&srch(l)).sort(byD);
+  $('#list').innerHTML=R.length?R.map(l=>`<div class="card lead"><span class="grip" onpointerdown="dstart(event,'${l.id}')">⠿</span><div style="flex:1" onclick="openL('${l.id}')"><div class="nm">${esc(l.name)}</div><div class="mut">📞 ${esc(l.phone)} · 📅 ${fd(l.date)}${l.src?' · '+esc(l.src):''}</div>${l.note?`<div class="mut">${esc(l.note.slice(0,60))}</div>`:''}</div><div onclick="openL('${l.id}')" style="text-align:end"><span class="tag ${tcl(l.stage)}">${SN[l.stage]}</span>${heat(l)}</div></div>`).join(''):
+  `<div class="empty">${L.length?'אין תוצאות':'עדיין אין לקוחות.<br>הוסף ליד, או הדבק את הטבלה מהאקסל.'}<br><br><button class="btn" onclick="impM()">ייבוא מאקסל</button></div>`}
+const cols=()=>[{k:'name',t:'שם',e:'text'},{k:'phone',t:'טלפון',e:'text'},{k:'date',t:'תאריך',e:'date'},{k:'stage',t:'שלב',e:'sel',o:ST},{k:'src',t:'מקור',e:'sel',o:SRC.map(s=>[s,s])},{k:'heat',t:'חום',e:'sel',o:Object.entries(HN),ro:1},
+  ...F.map(f=>({k:'f'+f.id,t:f.name,e:f.type==='choice'?'sel':f.type,o:(f.opts||[]).map(x=>[x,x]),f})),{k:'upd',t:'עדכון אחרון',e:'text',ro:1},{k:'note',t:'תיעוד',e:'text'}];
+const gv=(l,c)=>c.k==='heat'?hk(l):c.k==='upd'?(l.upd||l.date||''):c.f?((l.cf||{})[c.f.id]??''):(l[c.k]??'');
+const sv=(l,c)=>c.k==='heat'?hd(l):c.k==='stage'?ST.findIndex(x=>x[0]===l.stage):gv(l,c);
+const cm=(l,C)=>C.every(c=>{const v=cfl[c.k];if(!v)return true;const x=String(gv(l,c));return c.e==='sel'?x===v:x.toLowerCase().includes(v.toLowerCase())});
+function cell(l,c){const v=gv(l,c);
+  if(c.k==='heat')return `<div style="padding:8px">${l.stage==='closed'?'✅':hk(l)?HI[hk(l)]+' '+hd(l)+' ימים':'—'}</div>`;
+  if(c.k==='upd')return `<div style="padding:8px">${fd(v)}</div>`;
+  const a=`onchange="ce(this,'${l.id}','${c.k}')"`;
+  if(c.e==='sel')return `<select ${a}><option value=""></option>${c.o.some(([x])=>x===v)||v===''?'':`<option selected>${esc(v)}</option>`}${c.o.map(([x,y])=>`<option value="${esc(x)}" ${x===v?'selected':''}>${esc(y)}</option>`).join('')}</select>`;
+  return `<input type="${c.e==='number'?'number':c.e==='date'?'date':'text'}" value="${esc(v)}" ${a}>`}
+function ce(el,id,k){const o=L.find(x=>x.id===id),l={...o};let v=el.value;
+  if(k==='phone'){v=np(v);if(L.some(x=>x.id!==id&&np(x.phone)===v)){alert('המספר כבר קיים');el.value=o.phone;return}el.value=v}
+  if(k==='name'&&!v.trim()){el.value=o.name;return}
+  if(k[0]==='f'){const f=F.find(x=>x.id===k.slice(1));l.cf={...(l.cf||{})};v===''?delete l.cf[f.id]:l.cf[f.id]=f.type==='number'?+v:v}
+  else if(k==='stage'){if(!v){el.value=o.stage;return}l.stage=v;const i=IDX.indexOf(v);if(i>=0)l.reached=Math.max(l.reached||0,i)}
+  else l[k]=v;
+  save(l)}
+function cfq(k,v){cfl[k]=v;tbody()}
+function table(){const C=cols();
+  $('#list').innerHTML=`<div class="tw card"><table class="xl"><thead><tr><th></th>${C.map(x=>`<th class="sh" onclick="sortT('${x.k}')">${esc(x.t)} ${sort.k===x.k?(sort.d>0?'▲':'▼'):''}</th>`).join('')}</tr><tr class="flt"><th></th>${C.map(x=>`<th>${x.e==='sel'?`<select onchange="cfq('${x.k}',this.value)"><option value="">הכל</option>${x.o.map(([a,b])=>`<option value="${esc(a)}" ${cfl[x.k]===a?'selected':''}>${esc(b)}</option>`).join('')}</select>`:`<input placeholder="סינון" value="${esc(cfl[x.k]||'')}" oninput="cfq('${x.k}',this.value)">`}</th>`).join('')}</tr></thead><tbody id="tb"></tbody></table></div>`;tbody()}
+function tbody(){const C=cols(),c=C.find(x=>x.k===sort.k)||C[2],R=L.filter(l=>fm(l)&&srch(l)&&cm(l,C)),el=$('#tb');if(!el)return;
+  R.sort((a,b)=>{const x=sv(a,c),y=sv(b,c),ex=x===''||x==null,ey=y===''||y==null;if(ex&&ey)return 0;if(ex)return 1;if(ey)return -1;return(typeof x==='number'&&typeof y==='number'?x-y:String(x).localeCompare(String(y),'he'))*sort.d});
+  el.innerHTML=R.length?R.slice(0,500).map(l=>`<tr><td><button class="btn" style="padding:4px 8px" onclick="openL('${l.id}')">↗</button></td>${C.map(x=>`<td>${cell(l,x)}</td>`).join('')}</tr>`).join('')+(R.length>500?`<tr><td colspan="${C.length+1}" class="mut">מוצגות 500 מתוך ${R.length}. צמצם בסינון.</td></tr>`:''):`<tr><td colspan="${C.length+1}" class="empty">אין תוצאות</td></tr>`}
+
+// ---- main screen
+function draw(){
+  const ae=document.activeElement;if(page==='leads'&&view==='table'&&ae&&ae.closest&&ae.closest('#tb'))return; // don't interrupt cell editing
+  const same=draw.k===page+view;draw.k=page+view;const old=document.querySelector('.tw,.cards,.cols'),sp=old&&same?[old.scrollTop,old.scrollLeft]:null;
+  const reach=i=>L.filter(l=>l.reached>=i).length,mx=Math.max(1,reach(0)),nAll=L.filter(l=>l.stage!=='dead').length;
+  const tn=tasks().reduce((a,g)=>a+g.arr.length,0),adm=sb&&ME&&ME.role!=='member';
+  const nv=(k,i,t,b)=>`<button class="nv ${page===k?'on':''}" onclick="go('${k}')"><span>${i}</span>${t}${b?` <span class="tag">${b}</span>`:''}</button>`;
+  const side=`<aside class="side"><div class="brand">Studio Balance</div>${nv('tasks','✅','משימות',tn)}${nv('fall','📊','מפל')}${nv('leads','👥','לידים')}<button class="nv" onclick="fieldsM()"><span>⚙</span>שדות</button><button class="nv" onclick="impM()"><span>⬆</span>ייבוא</button><button class="nv" onclick="exportCSV()"><span>⬇</span>ייצוא</button>${adm?nv('users','👤','משתמשים')+nv('audit','🕘','יומן'):''}${sb?'<button class="nv" onclick="logout()"><span>⎋</span>יציאה</button>':''}<div class="mut st">${mode==='db'?'✓ נשמר במסד נתונים':mode==='local'?'נשמר רק במכשיר הזה':mode==='err'?'שגיאת חיבור':'מתחבר…'}</div></aside>`;
+  let main;
+  if(page==='tasks')main=tasksHtml();
+  else if(page==='fall'){
+    const lost=L.filter(l=>l.stage==='lost'),fu=L.filter(l=>l.stage==='followup'),dead=L.filter(l=>l.stage==='dead'),rs={};lost.forEach(l=>{const r=l.reason||'לא צוין';rs[r]=(rs[r]||0)+1});
+    main=`<h1>מפל לקוחות</h1><p class="mut">לחיצה על שלב פותחת את הלידים שנמצאים בו עכשיו.</p><div class="card">`+IDX.map((k,i)=>{const c=reach(i),p=i?reach(i-1):c;
+      return `<div class="fun ${k==='closed'?'won':''}" style="cursor:pointer" onclick="filt='${k}';go('leads')"><div class="t"><span>${SN[k]}</span><b>${c}</b></div><div class="b" style="width:${c/mx*100}%"></div><div class="d">${i?(p?Math.round(c/p*100):0)+'% מהשלב הקודם':'כל הפניות'}</div></div>`}).join('')+
+      `<div class="dz">${['hot','warm','cold'].map(k=>`<div onclick="filt='h:${k}';go('leads')">${HI[k]} ${HN[k]}<br><b>${L.filter(l=>hk(l)===k).length}</b></div>`).join('')}</div>`+
+      `<div class="dz">${[['lost',lost.length],['followup',fu.length],['dead',dead.length]].map(([k,c])=>`<div class="${k==='lost'?'lost':''}" onclick="filt='${k}';go('leads')">${SN[k]}<br><b>${c}</b></div>`).join('')}</div>`+
+      (lost.length?`<div class="mut bad" style="margin-top:10px">סיבות כשלון: ${Object.entries(rs).sort((a,b)=>b[1]-a[1]).map(([k,v])=>esc(k)+' ('+v+')').join(' · ')}</div>`:'')+`</div>`;
+  }else if(page==='users')main='<h1>משתמשים</h1><div id="usr" class="empty">טוען…</div>';
+  else if(page==='audit')main='<h1>יומן פעילות</h1><div class="row" style="flex-wrap:wrap;margin-bottom:10px"><select id="auu" onchange="auRows()" style="margin:0;flex:1"></select><input id="aus" placeholder="חיפוש" oninput="auRows()" style="margin:0;flex:2"></div><div class="tw card"><table><thead><tr><th>זמן</th><th>משתמש</th><th>פעולה</th><th>ליד</th><th>פרטים</th></tr></thead><tbody id="aur"><tr><td colspan="5" class="empty">טוען…</td></tr></tbody></table></div>';
+  else{
+    main=`<div class="row" style="margin-bottom:10px;flex-wrap:wrap"><input id="q" placeholder="חיפוש שם או טלפון (Enter לחיפוש מיידי)" value="${esc(qraw)}" oninput="qd(this.value)" onkeydown="if(event.key==='Enter')qd(this.value,1)" style="margin:0;flex:1;min-width:200px"><div class="chips" style="margin:0">${[['list','כרטיסים'],['board','עמודות'],['table','טבלה']].map(v=>`<button class="chip ${view===v[0]?'on':''}" onclick="setV('${v[0]}')">${v[1]}</button>`).join('')}</div><button class="btn pri" onclick="addM()">+ ליד חדש</button></div>`+
+    (view==='board'?'':`<div class="chips">${[['all','הכול ('+nAll+')'],...['hot','warm','cold'].map(k=>['h:'+k,HI[k]+' '+HN[k]+' ('+L.filter(l=>hk(l)===k).length+')']),...ST.map(x=>[x[0],x[1]+' ('+L.filter(l=>l.stage===x[0]).length+')'])].map(x=>`<button class="chip ${filt===x[0]?'on':''} ${x[0]==='lost'?'negchip':''}" data-s="${x[0]==='all'||x[0].includes(':')?'':x[0]}" onclick="filt='${x[0]}';draw()">${x[1]}</button>`).join('')}</div>`)+
+    `<div id="list" class="${view==='list'?'cards':''}"></div>`}
+  const f=ae&&ae.id==='q';
+  $('#app').innerHTML=`<div class="shell">${side}<main class="main">${main}</main></div>`;
+  if(page==='leads')list();if(page==='users')loadUsers();if(page==='audit')loadAudit();
+  const nw=document.querySelector('.tw,.cards,.cols');if(nw&&sp){nw.scrollTop=sp[0];nw.scrollLeft=sp[1]}
+  if(f){const e=$('#q');if(e){e.focus();e.setSelectionRange(qraw.length,qraw.length)}}
+}
 init();draw();
 </script>
 </body></html>
