@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Studio Balance · לקוחות</title>
+<style>
+:root{--bg:#f6f7f4;--card:#fff;--ink:#1c1f1d;--mut:#6b7370;--line:#e4e7e3;--pri:#2f6f5e;--pri2:#e6f1ed;--bad:#b42318;--warn:#b45309;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121513;--card:#1b1f1d;--ink:#eef2ef;--mut:#9aa6a0;--line:#2b312e;--pri:#6fc4aa;--pri2:#1f2f2a;--bad:#f87171;--warn:#fbbf24;color-scheme:dark}}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+.wrap{max-width:720px;margin:0 auto;padding:16px 14px 90px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:12px}
+h1{font-size:22px;margin:4px 0}h2{font-size:16px;margin:0 0 12px}
+.mut{color:var(--mut);font-size:13px}
+.row{display:flex;gap:10px;align-items:center;justify-content:space-between}
+.btn{padding:11px 14px;border-radius:12px;border:1px solid var(--line);background:var(--card);cursor:pointer}
+.btn:hover,.btn.on{border-color:var(--pri);background:var(--pri2)}
+.pri{background:var(--pri);color:#fff;border-color:var(--pri);font-weight:600}.pri:hover{background:var(--pri);opacity:.9}
+.full{display:block;width:100%;margin-top:8px;text-align:center;text-decoration:none}
+input,select,textarea{width:100%;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--card);margin-top:8px}
+.fun{margin:8px 0}.fun .t{display:flex;justify-content:space-between;font-size:14px;margin-bottom:3px}
+.fun .b{height:30px;background:var(--pri);border-radius:8px;min-width:6px;transition:width .4s}
+.fun .d{font-size:12px;color:var(--mut)}
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:8px}
+.chip{white-space:nowrap;padding:7px 12px;border-radius:99px;border:1px solid var(--line);background:var(--card);cursor:pointer;font-size:14px}
+.chip.on{background:var(--pri);color:#fff;border-color:var(--pri)}
+.lead{cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.tag{font-size:12px;padding:3px 10px;border-radius:99px;background:var(--pri2);color:var(--pri);white-space:nowrap}
+.tag.x{background:none;border:1px solid var(--line);color:var(--mut)}
+.fab{position:fixed;inset-inline-start:14px;bottom:calc(16px + env(safe-area-inset-bottom,0px));border-radius:99px;padding:14px 22px;box-shadow:0 6px 20px rgba(0,0,0,.25);z-index:6}
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;justify-content:center;z-index:20}
+.md{background:var(--card);width:100%;max-width:560px;border-radius:20px 20px 0 0;padding:18px;max-height:90vh;overflow:auto}
+.g{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.empty{text-align:center;padding:26px;color:var(--mut)}
+.grip{touch-action:none;cursor:grab;padding:6px 8px;color:var(--mut);font-size:22px;line-height:1;user-select:none}
+.ghost{position:fixed;transform:translate(-50%,-130%);background:var(--pri);color:#fff;padding:8px 14px;border-radius:12px;pointer-events:none;z-index:50;box-shadow:0 6px 18px rgba(0,0,0,.3)}
+.hot{outline:2px solid var(--pri);background:var(--pri2)!important;border-radius:12px}
+.dz{display:flex;gap:6px;margin-top:10px}.dz>div{flex:1;text-align:center;padding:10px 4px;border:1px dashed var(--line);border-radius:12px;font-size:13px;cursor:pointer}
+.nm{font-size:17px;font-weight:700}.fun{border-radius:10px;padding:2px 4px}
+.cols{display:flex;gap:10px;overflow-x:auto;padding-bottom:8px}.col{min-width:230px;flex:1;padding:4px;border-radius:12px}.col h3{font-size:14px;color:var(--mut);margin:0 0 8px}
+table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:10px 8px;text-align:start;border-bottom:1px solid var(--line);white-space:nowrap}th{color:var(--mut);font-weight:500}tr.r{cursor:pointer}tr.r:hover{background:var(--pri2)}
+</style>
+</head>
+<body><div class="wrap" id="app"></div><div id="m"></div>
+<script>
+const $=s=>document.querySelector(s);
+const esc=t=>String(t??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const iso=(d=new Date())=>d.toISOString().slice(0,10);
+const fd=s=>s?s.split('-').reverse().join('/'):'';
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const ST=[['new','ליד חדש'],['phone','שיחת טלפון'],['booked','אימון מתואם'],['attended','אימון בפועל'],['closed','סגירה'],['lost','כשלון'],['followup','צריך לחזור'],['dead','ליד שמת']];
+const SN=Object.fromEntries(ST);const IDX=['new','phone','booked','attended','closed'];
+const SRC=['וואטסאפ','ממומן (מטא)','דרך מישהו/י'];
+const REA=['לא מהאיזור','התחיל במקום אחר','לא רלוונטי','מחיר','אחר'];
+let L=[],F=[],db=null,mode='...',filt='all',q='';
+let view=(()=>{try{return localStorage.getItem('sb_view')}catch(e){return null}})()||'list';
+const LS='sb_leads';
+// ---- storage: shared DB if available, else this device only
+async function init(){
+  try{db=window.claude?await claude.use('db'):null}catch(e){db=null}
+  if(db){mode='db';
+    const t=setTimeout(()=>{mode='err';draw()},10000);
+    db.doc('config/fields').onSnapshot(s=>{F=(s.exists&&s.data().list)||[];draw()},()=>{});db.collection('leads').onSnapshot(s=>{clearTimeout(t);L=s.docs.map(x=>({...x.data(),id:x.id}));mode='db';draw()},()=>{clearTimeout(t);mode='err';draw()});
+  }else{mode='local';try{L=JSON.parse(localStorage.getItem(LS))||[]}catch(e){L=[]}try{F=JSON.parse(localStorage.getItem('sb_fields'))||[]}catch(e){F=[]}draw()}
+}
+function put(l){
+  l.upd=iso();const i=L.findIndex(x=>x.id===l.id);i<0?L.push(l):L[i]=l;
+  if(db){const{id,...r}=l;db.collection('leads').doc(id).set(r).catch(()=>alert('השמירה נכשלה'))}
+  else try{localStorage.setItem(LS,JSON.stringify(L))}catch(e){}
+  draw();
+}
+function del(id){L=L.filter(x=>x.id!==id);if(db)db.collection('leads').doc(id).delete().catch(()=>{});else try{localStorage.setItem(LS,JSON.stringify(L))}catch(e){}draw()}
+const ph=p=>String(p||'').replace(/\D/g,'');
+// ---- screens
+function draw(){
+  const n=L.filter(l=>l.stage!=='dead').length,reach=i=>L.filter(l=>l.reached>=i).length;
+  const mx=Math.max(1,reach(0));
+  let h=`<div class="row"><h1>Studio Balance</h1><span class="mut">${mode==='db'?'✓ נשמר במסד נתונים':mode==='local'?'נשמר רק במכשיר הזה':mode==='err'?'שגיאת חיבור':'מתחבר…'}</span></div>`;
+  h+=`<div class="card"><h2 style="margin-bottom:4px">מסלול הלקוחות (Waterfall)</h2><div class="mut" style="margin-bottom:8px">גרור כרטיס ⠿ אל שלב כדי להזיז אותו</div>`+IDX.map((k,i)=>{
+    const c=reach(i),p=i?reach(i-1):c;
+    return `<div class="fun" data-s="${k}"><div class="t"><span>${SN[k]}</span><b>${c}</b></div><div class="b" style="width:${c/mx*100}%"></div><div class="d">${i?(p?Math.round(c/p*100):0)+'% מהשלב הקודם':'כל הפניות'}</div></div>`}).join('');
+  const lost=L.filter(l=>l.stage==='lost'),fu=L.filter(l=>l.stage==='followup');
+  const rs={};lost.forEach(l=>{const r=l.reason||'לא צוין';rs[r]=(rs[r]||0)+1});
+  const dead=L.filter(l=>l.stage==='dead');h+=`<div class="dz">${[['lost',lost.length],['followup',fu.length],['dead',dead.length]].map(([k,c])=>`<div data-s="${k}" onclick="filt='${k}';draw()">${SN[k]}<br><b>${c}</b></div>`).join('')}</div>`;
+  if(lost.length)h+=`<div class="mut" style="margin-top:4px">סיבות: ${Object.entries(rs).sort((a,b)=>b[1]-a[1]).map(([k,v])=>esc(k)+' ('+v+')').join(' · ')}</div>`;
+  h+=`</div><input id="q" placeholder="חיפוש שם או טלפון" value="${esc(q)}" oninput="q=this.value;list()" style="margin:0 0 8px"><div class="row" style="margin-bottom:8px"><div class="chips" style="margin:0">${[['list','כרטיסים'],['board','עמודות'],['table','טבלה']].map(v=>`<button class="chip ${view===v[0]?'on':''}" onclick="setV('${v[0]}')">${v[1]}</button>`).join('')}</div><button class="btn" onclick="fieldsM()">⚙ שדות</button></div><div class="chips">`+[['all','הכול ('+n+')'],...ST.map(s=>[s[0],s[1]+' ('+L.filter(l=>l.stage===s[0]).length+')'])].map(s=>`<button class="chip ${filt===s[0]?'on':''}" data-s="${s[0]==='all'?'':s[0]}" onclick="filt='${s[0]}';draw()">${s[1]}</button>`).join('')+`</div><div id="list"></div>
+  <button class="btn pri fab" onclick="addM()">+ ליד חדש</button>`;
+  const f=document.activeElement&&document.activeElement.id==='q';
+  $('#app').innerHTML=h;list();
+  if(f){const e=$('#q');e.focus();e.setSelectionRange(q.length,q.length)}
+}
+function list(){if(L.length){if(view==='board')return board();if(view==='table')return table()}
+  const s=q.trim().toLowerCase();
+  const R=L.filter(l=>(filt==='all'?l.stage!=='dead':l.stage===filt)&&(!s||(l.name||'').toLowerCase().includes(s)||ph(l.phone).includes(s.replace(/\D/g,'')||'§'))).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  $('#list').innerHTML=R.length?R.map(l=>`<div class="card lead"><span class="grip" onpointerdown="dstart(event,'${l.id}')">⠿</span><div style="flex:1" onclick="openL('${l.id}')"><div class="nm">${esc(l.name)}</div><div class="mut">📞 ${esc(l.phone)} · 📅 ${fd(l.date)}${l.src?' · '+esc(l.src):''}</div>${l.note?`<div class="mut">${esc(l.note.slice(0,60))}</div>`:''}</div><div onclick="openL('${l.id}')" style="text-align:end"><span class="tag ${['lost','followup','dead'].includes(l.stage)?'x':''}">${SN[l.stage]}</span>${heat(l)}</div></div>`).join(''):
+  `<div class="empty">${L.length?'אין תוצאות':'עדיין אין לקוחות.<br>הוסף ליד, או הדבק את הטבלה מהאקסל.'}<br><br><button class="btn" onclick="impM()">ייבוא מאקסל</button></div>`;
+}
+const OPEN=['new','phone','booked','attended'];
+function heat(l){if(!OPEN.includes(l.stage))return '';const d=Math.max(0,Math.floor((Date.now()-new Date((l.upd||l.date)+'T12:00:00'))/864e5));const [e,t]=d<=2?['🔥','חם']:d<=7?['🌤','פושר']:['❄️','קר'];return `<div class="mut" style="margin-top:4px">${e} ${t} · ${d?'לפני '+d+' ימים':'היום'}</div>`}
+let drag=null;
+function dstart(e,id){e.preventDefault();const l=L.find(x=>x.id===id);const g=document.createElement('div');g.className='ghost';g.textContent=l.name;document.body.appendChild(g);drag={id,g,t:null};dmove(e);window.addEventListener('pointermove',dmove);window.addEventListener('pointerup',dend,{once:true})}
+function dmove(e){if(!drag)return;drag.g.style.left=e.clientX+'px';drag.g.style.top=e.clientY+'px';const el=document.elementFromPoint(e.clientX,e.clientY),z=el&&el.closest('[data-s]');document.querySelectorAll('.hot').forEach(x=>x.classList.remove('hot'));if(z&&z.dataset.s){z.classList.add('hot');drag.t=z.dataset.s}else drag.t=null;if(e.clientY<70)scrollBy(0,-12);else if(e.clientY>innerHeight-70)scrollBy(0,12);const c=document.querySelector('.cols');if(c){if(e.clientX<50)c.scrollLeft-=12;else if(e.clientX>innerWidth-50)c.scrollLeft+=12}}
+function dend(){window.removeEventListener('pointermove',dmove);if(!drag)return;const{g,t,id}=drag;g.remove();drag=null;document.querySelectorAll('.hot').forEach(x=>x.classList.remove('hot'));const l=L.find(x=>x.id===id);if(t&&l&&l.stage!==t){setSt(id,t);if(t!=='lost')closeM()}}
+const srch=l=>{const s=q.trim().toLowerCase();return !s||(l.name||'').toLowerCase().includes(s)||ph(l.phone).includes(s.replace(/\D/g,'')||'§')};
+const byD=(a,b)=>(b.date||'').localeCompare(a.date||'');
+function setV(v){view=v;try{localStorage.setItem('sb_view',v)}catch(e){}draw()}
+function board(){const R=L.filter(srch);
+$('#list').innerHTML=`<div class="cols">`+ST.map(([k,t])=>{const C=R.filter(l=>l.stage===k).sort(byD);return `<div class="col" data-s="${k}"><h3>${t} (${C.length})</h3>${C.map(l=>`<div class="card lead" style="padding:10px"><span class="grip" onpointerdown="dstart(event,'${l.id}')">⠿</span><div style="flex:1" onclick="openL('${l.id}')"><div class="nm" style="font-size:15px">${esc(l.name)}</div><div class="mut">${esc(l.phone)}<br>${fd(l.date)}</div>${heat(l)}</div></div>`).join('')||'<div class="mut">ריק</div>'}</div>`}).join('')+`</div>`}
+function table(){const R=L.filter(l=>(filt==='all'?l.stage!=='dead':l.stage===filt)&&srch(l)).sort(byD);
+if(!R.length){$('#list').innerHTML='<div class="empty">אין תוצאות</div>';return}
+$('#list').innerHTML=`<div class="card" style="padding:0;overflow-x:auto"><table><tr><th>שם</th><th>טלפון</th><th>תאריך</th><th>שלב</th><th>מקור</th>${F.map(f=>`<th>${esc(f.name)}</th>`).join('')}<th>תיעוד</th></tr>${R.map(l=>`<tr class="r" onclick="openL('${l.id}')"><td><b>${esc(l.name)}</b></td><td>${esc(l.phone)}</td><td>${fd(l.date)}</td><td>${SN[l.stage]}</td><td>${esc(l.src)}</td>${F.map(f=>{const v=(l.cf||{})[f.id];return `<td>${esc(f.type==='date'?fd(v):v)}</td>`}).join('')}<td>${esc((l.note||'').slice(0,40))}</td></tr>`).join('')}</table></div>`}
+function saveF(){if(db)db.doc('config/fields').set({list:F}).catch(()=>alert('השמירה נכשלה'));else try{localStorage.setItem('sb_fields',JSON.stringify(F))}catch(e){}draw()}
+const cfIn=(l,f)=>{const v=(l.cf||{})[f.id]??'';const oc=`onchange="saveCF('${l.id}')"`;
+const el=f.type==='choice'?`<select id="cf_${f.id}" ${oc}><option value=""></option>${(f.opts||[]).map(o=>`<option ${o===v?'selected':''}>${esc(o)}</option>`).join('')}</select>`:`<input id="cf_${f.id}" type="${f.type==='number'?'number':f.type==='date'?'date':'text'}" value="${esc(v)}" ${oc}>`;
+return `<div><div class="mut" style="margin-top:6px">${esc(f.name)}</div>${el}</div>`};
+function saveCF(id){const l=L.find(x=>x.id===id);const cf={...(l.cf||{})};F.forEach(f=>{const e=$('#cf_'+f.id);if(e){if(e.value==='')delete cf[f.id];else cf[f.id]=f.type==='number'?+e.value:e.value}});put({...l,cf})}
+function fieldsM(){modal(`<h2>שדות נוספים</h2><p class="mut">שדה חדש מופיע בכל הלידים, גם הקיימים, ואפשר להשאיר אותו ריק.</p>${F.map(f=>`<div class="row card" style="padding:10px"><span><b>${esc(f.name)}</b> <span class="mut">${{text:'טקסט',number:'מספר',date:'תאריך',choice:'בחירה'}[f.type]}${f.opts&&f.opts.length?': '+esc(f.opts.join(', ')):''}</span></span><button class="btn" style="color:var(--bad)" onclick="delF('${f.id}')">מחיקה</button></div>`).join('')||'<div class="mut">עדיין אין שדות.</div>'}<input id="fn" placeholder="שם השדה (למשל: גיל)"><select id="ft"><option value="text">טקסט</option><option value="number">מספר</option><option value="date">תאריך</option><option value="choice">בחירה מרשימה</option></select><input id="fo" placeholder="לבחירה מרשימה: אפשרויות מופרדות בפסיקים"><button class="btn pri full" onclick="addF()">הוספת שדה</button>`)}
+function addF(){const name=$('#fn').value.trim(),type=$('#ft').value,opts=$('#fo').value.split(',').map(x=>x.trim()).filter(Boolean);
+if(!name){alert('חסר שם לשדה');return}if(type==='choice'&&opts.length<2){alert('לבחירה צריך לפחות שתי אפשרויות');return}
+F.push({id:uid(),name,type,opts:type==='choice'?opts:[]});saveF();fieldsM()}
+function delF(id){const f=F.find(x=>x.id===id);const k=L.filter(l=>l.cf&&l.cf[id]!==undefined).length;
+if(!confirm('למחוק את השדה "'+f.name+'"? הערכים שלו יימחקו מ-'+k+' לידים. אי אפשר לבטל.'))return;
+L=L.map(l=>{if(!l.cf||l.cf[id]===undefined)return l;const cf={...l.cf};delete cf[id];const n={...l,cf};if(db){const{id:i,...r}=n;db.collection('leads').doc(i).set(r).catch(()=>{})}return n});
+if(!db)try{localStorage.setItem(LS,JSON.stringify(L))}catch(e){}
+F=F.filter(x=>x.id!==id);saveF();fieldsM()}
+function modal(h){$('#m').innerHTML=`<div class="ov" onclick="if(event.target===this)closeM()"><div class="md">${h}</div></div>`}
+const closeM=()=>{$('#m').innerHTML=''};
+function addM(){
+  modal(`<h2>ליד חדש</h2><input id="n" placeholder="שם"><input id="p" placeholder="טלפון" type="tel"><select id="s">${SRC.map(o=>`<option>${o}</option>`).join('')}</select><input id="d" type="date" value="${iso()}"><button class="btn pri full" onclick="saveNew()">שמירה</button>`)}
+function saveNew(){
+  const name=$('#n').value.trim(),phone=$('#p').value.trim();
+  if(!name||!phone){alert('חסר שם או טלפון');return}
+  const dup=L.find(l=>ph(l.phone)===ph(phone));
+  if(dup&&!confirm('המספר כבר קיים ('+dup.name+'). להוסיף בכל זאת?'))return;
+  put({id:uid(),name,phone,src:$('#s').value,date:$('#d').value||iso(),stage:'new',reached:0,note:''});closeM();
+}
+function openL(id){
+  const l=L.find(x=>x.id===id);
+  const wa=ph(l.phone).replace(/^0/,'972');
+  const msg=`היי ${l.name} 😊\n\nשובצת לשיעור ניסיון בתאריך ${fd(l.tDate)||'__'}\nבשעה ${l.tTime||'__'}\n\n*יש לחתום על הצהרת הבריאות בלינק המצורף טרם הגעתך לשיעור. 🖊️\n\n*שינוי מועד השיבוץ עד 24 שעות לפני.\n\nאין זיכוי על שיעור ניסיון-ניתן לממש עד שבועיים מיום הרכישה.\n\n*כתובת הסטודיו-כוכב הים 14 חופית. 🗺️\n\n*מומלץ להגיע כמה דקות לפני השיעור כדי להתמקם בנחת.\n\nתהנה 🌻\n\nhttps://docs.google.com/forms/d/e/1FAIpQLScahNXAH30hvVKIMrVCvCfXevrNtOkuIBmK8J9zzBF-QCGzOQ/viewform?usp=dialog`;
+  modal(`<div class="row"><h2 style="margin:0">${esc(l.name)}</h2><a class="btn" href="tel:${esc(l.phone)}">📞 ${esc(l.phone)}</a></div>
+  <div class="mut" style="margin-top:6px">נכנס ב-${fd(l.date)}${l.src?' · '+esc(l.src):''}</div>
+  <div class="mut" style="margin-top:12px">שלב</div><div class="g">${ST.map(s=>`<button class="btn ${l.stage===s[0]?'on':''}" onclick="setSt('${id}','${s[0]}')">${s[1]}</button>`).join('')}</div>
+  ${l.stage==='lost'?`<div class="mut" style="margin-top:12px">סיבה</div><div class="g">${REA.map(r=>`<button class="btn ${l.reason===r?'on':''}" onclick="setR('${id}','${r}')">${r}</button>`).join('')}</div>`:''}
+  ${F.length?`<div class="mut" style="margin-top:12px">פרטים נוספים</div><div class="g">${F.map(f=>cfIn(l,f)).join('')}</div>`:''}<div class="mut" style="margin-top:12px">תיעוד שיחה</div><textarea id="nt" rows="3" onblur="saveN('${id}')">${esc(l.note)}</textarea>
+  <div class="mut" style="margin-top:12px">שיעור ניסיון</div><div class="g"><input id="td" type="date" value="${l.tDate||''}" onchange="saveT('${id}')"><input id="tt" type="time" value="${l.tTime||''}" onchange="saveT('${id}')"></div>
+  <a class="btn pri full" target="_blank" rel="noopener" href="https://wa.me/${wa}?text=${encodeURIComponent(msg)}" onclick="saveT('${id}',1)">שליחת הודעת שיבוץ בוואטסאפ</a>
+  <div class="mut">ההודעה נפתחת בוואטסאפ מוכנה, ואתה לוחץ שליחה בעצמך.</div>
+  <div class="mut" style="margin-top:12px">לא מוחקים לידים. ליד שלא רלוונטי יותר עובר ל״ליד שמת״.</div>`);
+}
+function setSt(id,s){
+  const l={...L.find(x=>x.id===id),stage:s};const i=IDX.indexOf(s);
+  if(i>=0)l.reached=Math.max(l.reached||0,i);
+  put(l);openL(id);
+}
+const setR=(id,r)=>{put({...L.find(x=>x.id===id),reason:r});openL(id)};
+function saveN(id){const l=L.find(x=>x.id===id),v=$('#nt');if(l&&v&&v.value!==l.note)put({...l,note:v.value})}
+function saveT(id,adv){const l=L.find(x=>x.id===id),n={...l,tDate:$('#td').value,tTime:$('#tt').value};
+  if(adv&&IDX.indexOf(n.stage)<2&&!['lost','followup'].includes(n.stage)){n.stage='booked';n.reached=Math.max(n.reached||0,2)}put(n)}
+// ---- Excel import: columns = name, date, phone, status, source, notes
+function impM(){modal(`<h2>ייבוא לידים</h2><p class="mut">בחר קובץ CSV (באקסל: שמירה בשם ← CSV), או הדבק שורות מהטבלה. שורת כותרות מזוהה אוטומטית: שם, תאריך, טלפון, סטטוס, מקור, תיעוד, ושמות השדות הנוספים. בלי כותרות הסדר הוא שם, תאריך, טלפון, סטטוס, מקור, תיעוד. לידים עם טלפון שכבר קיים מדולגים.</p><input id="ifl" type="file" accept=".csv,.tsv,.txt,text/csv" onchange="readF(this.files[0])"><textarea id="ix" rows="6" placeholder="או הדבק כאן"></textarea><button class="btn pri full" onclick="doImp()">ייבוא</button>`)}
+function readF(f){if(!f)return;const r=new FileReader();r.onload=()=>{const b=new Uint8Array(r.result);let t;try{t=new TextDecoder('utf-8',{fatal:true}).decode(b)}catch(e){t=new TextDecoder('windows-1255').decode(b)}$('#ix').value=t.replace(/^\uFEFF/,'')};r.readAsArrayBuffer(f)}
+function parseT(t){const first=t.split('\n')[0]||'';const dl=[['\t',first.split('\t').length],[';',first.split(';').length],[',',first.split(',').length]].sort((a,b)=>b[1]-a[1])[0][0];
+const rows=[];let r=[],c='',qt=false;
+for(let i=0;i<t.length;i++){const ch=t[i];
+if(qt){if(ch==='"'){if(t[i+1]==='"'){c+='"';i++}else qt=false}else c+=ch}
+else if(ch==='"')qt=true;
+else if(ch===dl){r.push(c);c=''}
+else if(ch==='\n'||ch==='\r'){if(ch==='\r'&&t[i+1]==='\n')i++;r.push(c);c='';rows.push(r);r=[]}
+else c+=ch}
+if(c!==''||r.length){r.push(c);rows.push(r)}
+return rows.map(x=>x.map(v=>v.trim())).filter(x=>x.some(v=>v))}
+const ns=s=>/ממומן/.test(s)?'ממומן (מטא)':/צאפ|טסאפ/.test(s)?'וואטסאפ':/דרך/.test(s)?'דרך מישהו/י':(s||'');
+function pd(s){if(/^\d{4}-\d{2}-\d{2}/.test(s))return String(s).slice(0,10);const m=String(s||'').trim().match(/^(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?$/);if(!m)return iso();let y=m[3]?+m[3]:new Date().getFullYear();if(y<100)y+=2000;return `${y}-${String(m[2]).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`}
+function doImp(){
+const rows=parseT($('#ix').value);if(!rows.length){alert('אין שורות לייבוא');return}
+const pat={name:/^שם|name/i,date:/תאריך|date/i,phone:/טלפון|נייד|phone/i,stat:/סט|שלב|status/i,src:/מקור|source/i,note:/תיעוד|הערות|note/i};
+const hasH=rows[0].some(c=>/טלפון|תאריך|שם|סט|phone|name/i.test(c))&&!rows[0].some(c=>/^[\d\s+-]{9,}$/.test(c));
+let m={name:0,date:1,phone:2,stat:3,src:4,note:5},cfm={};
+if(hasH){const h=rows.shift();m={};h.forEach((c,i)=>{const f=F.find(f=>f.name===c);if(f){cfm[f.id]=i;return}const k=Object.keys(pat).find(k=>m[k]===undefined&&pat[k].test(c));if(k)m[k]=i});
+if(m.name===undefined){const used=[...Object.values(m),...Object.values(cfm)];const i=h.findIndex((_,i)=>!used.includes(i));if(i>=0)m.name=i}}
+if(m.name===undefined||m.phone===undefined){alert('לא נמצאו עמודות שם וטלפון');return}
+const seen=new Set(L.map(l=>ph(l.phone)));let a=0,sk=0;
+rows.forEach(r=>{const g=k=>m[k]===undefined?'':(r[m[k]]||'');
+const name=g('name');let p=ph(g('phone'));if(p.length===9&&p[0]==='5')p='0'+p;
+if(!name||p.length<9||seen.has(p)){sk++;return}seen.add(p);
+const stat=g('stat'),note=g('note');
+const st=(ST.find(s=>stat&&(stat.includes(s[1])||s[1].includes(stat)))||['new'])[0];
+const x={id:uid(),name,phone:p,date:pd(g('date')),upd:pd(g('date')),src:ns(g('src')),stage:st,reached:Math.max(0,IDX.indexOf(st)),note};
+const cf={};F.forEach(f=>{const v=cfm[f.id]!==undefined?r[cfm[f.id]]:'';if(v)cf[f.id]=f.type==='number'?(+v||v):f.type==='date'?pd(v):v});
+if(Object.keys(cf).length)x.cf=cf;
+if(st==='lost'){const rr=REA.find(z=>note.includes(z));x.reason=rr||'אחר'}
+L.push(x);a++;
+if(db){const{id,...o}=x;db.collection('leads').doc(id).set(o).catch(()=>{})}});
+if(!db)try{localStorage.setItem(LS,JSON.stringify(L))}catch(e){}
+closeM();draw();alert(`נוספו ${a}, דולגו ${sk} (כפולים או חסרי פרטים)`)}
+init();draw();
+</script>
+</body></html>
