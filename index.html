@@ -176,16 +176,19 @@ const ns=s=>/ממומן/.test(s)?'ממומן (מטא)':/צאפ|טסאפ/.test(s)
 function pd(s){if(/^\d{4}-\d{2}-\d{2}/.test(s))return String(s).slice(0,10);const m=String(s||'').trim().match(/^(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?$/);if(!m)return iso();let y=m[3]?+m[3]:new Date().getFullYear();if(y<100)y+=2000;return `${y}-${String(m[2]).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`}
 function doImp(){
 const rows=parseT($('#ix').value);if(!rows.length){alert('אין שורות לייבוא');return}
-const pat={name:/^שם|name/i,date:/תאריך|date/i,phone:/טלפון|נייד|phone/i,stat:/סט|שלב|status/i,src:/מקור|source/i,note:/תיעוד|הערות|note/i};
+const pat={name:/^שם|name/i,date:/תאריך|date/i,phone:/טלפון|נייד|phone/i,stat:/סט|שלב|status/i,src:/מקור|source/i,note:/תי?עוד|תיאור|שיחה|הערה|הערות|note/i};
 const hasH=rows[0].some(c=>/טלפון|תאריך|שם|סט|phone|name/i.test(c))&&!rows[0].some(c=>/^[\d\s+-]{9,}$/.test(c));
 let m={name:0,date:1,phone:2,stat:3,src:4,note:5},cfm={};
 if(hasH){const h=rows.shift();m={};h.forEach((c,i)=>{const f=F.find(f=>f.name===c);if(f){cfm[f.id]=i;return}const k=Object.keys(pat).find(k=>m[k]===undefined&&pat[k].test(c));if(k)m[k]=i});
-if(m.name===undefined){const used=[...Object.values(m),...Object.values(cfm)];const i=h.findIndex((_,i)=>!used.includes(i));if(i>=0)m.name=i}}
+if(m.name===undefined){const used=[...Object.values(m),...Object.values(cfm)];const i=h.findIndex((_,i)=>!used.includes(i));if(i>=0)m.name=i}
+if(m.note===undefined){const used=[...Object.values(m),...Object.values(cfm)];let best=-1,bl=0;h.forEach((_,i)=>{if(used.includes(i))return;const len=rows.reduce((t,r)=>t+(r[i]||'').length,0);if(len>bl){bl=len;best=i}});if(best>=0)m.note=best}}
 if(m.name===undefined||m.phone===undefined){alert('לא נמצאו עמודות שם וטלפון');return}
-const seen=new Set(L.map(l=>ph(l.phone)));let a=0,sk=0;
+const seen=new Set(L.map(l=>ph(l.phone)));let a=0,sk=0,up=0;
 rows.forEach(r=>{const g=k=>m[k]===undefined?'':(r[m[k]]||'');
 const name=g('name');let p=ph(g('phone'));if(p.length===9&&p[0]==='5')p='0'+p;
-if(!name||p.length<9||seen.has(p)){sk++;return}seen.add(p);
+if(!name||p.length<9){sk++;return}
+if(seen.has(p)){const ex=L.find(l=>ph(l.phone)===p),nt=g('note');if(ex&&nt&&!ex.note){ex.note=nt;up++;if(db){const{id,...o}=ex;db.collection('leads').doc(id).set(o).catch(()=>{})}}else sk++;return}
+seen.add(p);
 const stat=g('stat'),note=g('note');
 const st=(ST.find(s=>stat&&(stat.includes(s[1])||s[1].includes(stat)))||['new'])[0];
 const x={id:uid(),name,phone:p,date:pd(g('date')),upd:pd(g('date')),src:ns(g('src')),stage:st,reached:Math.max(0,IDX.indexOf(st)),note};
@@ -195,7 +198,7 @@ if(st==='lost'){const rr=REA.find(z=>note.includes(z));x.reason=rr||'אחר'}
 L.push(x);a++;
 if(db){const{id,...o}=x;db.collection('leads').doc(id).set(o).catch(()=>{})}});
 if(!db)try{localStorage.setItem(LS,JSON.stringify(L))}catch(e){}
-closeM();draw();alert(`נוספו ${a}, דולגו ${sk} (כפולים או חסרי פרטים)`)}
+closeM();draw();alert(`נוספו ${a}. תיעוד הושלם ב-${up} לידים קיימים. דולגו ${sk} (כפולים או חסרי פרטים).`)}
 init();draw();
 </script>
 </body></html>
