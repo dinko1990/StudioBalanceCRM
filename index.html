@@ -10,7 +10,22 @@
 *{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
 button,input,select,textarea{font:inherit;color:inherit}
-.wrap{max-width:720px;margin:0 auto;padding:16px 14px 90px}
+.wrap{max-width:none;margin:0;padding:0}
+.shell{display:flex;min-height:100vh}
+.side{width:190px;flex:none;background:var(--card);border-inline-end:1px solid var(--line);padding:18px 12px;display:flex;flex-direction:column;gap:6px;position:sticky;top:0;height:100vh;align-self:flex-start}
+.brand{font-weight:800;font-size:18px;margin-bottom:12px}
+.nv{display:flex;gap:10px;align-items:center;border:0;background:none;padding:11px 12px;border-radius:12px;cursor:pointer;color:var(--mut);font-size:15px;text-align:start}
+.nv.on{background:var(--pri2);color:var(--pri);font-weight:600}.nv:hover{background:var(--pri2)}
+.st{margin-top:auto}
+.main{flex:1;min-width:0;padding:20px 28px 60px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}.cards .card{margin:0}.cards .empty{grid-column:1/-1}
+.tag.lost{background:rgba(220,38,38,.13);color:var(--bad);border-color:transparent}
+.dz>.lost{border-color:var(--bad);color:var(--bad);background:rgba(220,38,38,.07)}
+.chip.negchip{color:var(--bad);border-color:var(--bad)}.chip.negchip.on{background:var(--bad);color:#fff}
+.btn.neg{color:var(--bad);border-color:var(--bad)}.btn.neg.on{background:rgba(220,38,38,.12)}
+.negc{background:rgba(220,38,38,.07)}.negc h3{color:var(--bad)}
+th.sh{cursor:pointer;user-select:none}
+@media(max-width:760px){.shell{display:block}.side{position:fixed;bottom:0;inset-inline:0;top:auto;width:auto;height:auto;flex-direction:row;justify-content:space-around;padding:6px 6px calc(6px + env(safe-area-inset-bottom,0px));border-inline-end:0;border-top:1px solid var(--line);z-index:8}.brand,.st{display:none}.nv{flex-direction:column;gap:2px;font-size:12px;padding:6px 10px}.main{padding:14px 12px 90px}}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:12px}
 h1{font-size:22px;margin:4px 0}h2{font-size:16px;margin:0 0 12px}
 .mut{color:var(--mut);font-size:13px}
@@ -39,7 +54,7 @@ input,select,textarea{width:100%;padding:12px;border-radius:12px;border:1px soli
 .hot{outline:2px solid var(--pri);background:var(--pri2)!important;border-radius:12px}
 .dz{display:flex;gap:6px;margin-top:10px}.dz>div{flex:1;text-align:center;padding:10px 4px;border:1px dashed var(--line);border-radius:12px;font-size:13px;cursor:pointer}
 .nm{font-size:17px;font-weight:700}.fun{border-radius:10px;padding:2px 4px}
-.cols{display:flex;gap:10px;overflow-x:auto;padding-bottom:8px}.col{min-width:230px;flex:1;padding:4px;border-radius:12px}.col h3{font-size:14px;color:var(--mut);margin:0 0 8px}
+.cols{display:flex;gap:10px;overflow-x:auto;padding-bottom:8px}.col{min-width:260px;flex:1;padding:4px;border-radius:12px}.col h3{font-size:14px;color:var(--mut);margin:0 0 8px}
 table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:10px 8px;text-align:start;border-bottom:1px solid var(--line);white-space:nowrap}th{color:var(--mut);font-weight:500}tr.r{cursor:pointer}tr.r:hover{background:var(--pri2)}
 </style>
 </head>
@@ -54,6 +69,7 @@ const ST=[['new','ליד חדש'],['phone','שיחת טלפון'],['booked','א�
 const SN=Object.fromEntries(ST);const IDX=['new','phone','booked','attended','closed'];
 const SRC=['וואטסאפ','ממומן (מטא)','דרך מישהו/י'];
 const REA=['לא מהאיזור','התחיל במקום אחר','לא רלוונטי','מחיר','אחר'];
+let page='leads',qraw='',qt,sort={k:'date',d:-1};
 let L=[],F=[],db=null,mode='...',filt='all',q='';
 let view=(()=>{try{return localStorage.getItem('sb_view')}catch(e){return null}})()||'list';
 const LS='sb_leads';
@@ -75,26 +91,35 @@ function del(id){L=L.filter(x=>x.id!==id);if(db)db.collection('leads').doc(id).d
 const ph=p=>String(p||'').replace(/\D/g,'');
 // ---- screens
 function draw(){
-  const n=L.filter(l=>l.stage!=='dead').length,reach=i=>L.filter(l=>l.reached>=i).length;
-  const mx=Math.max(1,reach(0));
-  let h=`<div class="row"><h1>Studio Balance</h1><span class="mut">${mode==='db'?'✓ נשמר במסד נתונים':mode==='local'?'נשמר רק במכשיר הזה':mode==='err'?'שגיאת חיבור':'מתחבר…'}</span></div>`;
-  h+=`<div class="card"><h2 style="margin-bottom:4px">מסלול הלקוחות (Waterfall)</h2><div class="mut" style="margin-bottom:8px">גרור כרטיס ⠿ אל שלב כדי להזיז אותו</div>`+IDX.map((k,i)=>{
-    const c=reach(i),p=i?reach(i-1):c;
-    return `<div class="fun" data-s="${k}"><div class="t"><span>${SN[k]}</span><b>${c}</b></div><div class="b" style="width:${c/mx*100}%"></div><div class="d">${i?(p?Math.round(c/p*100):0)+'% מהשלב הקודם':'כל הפניות'}</div></div>`}).join('');
-  const lost=L.filter(l=>l.stage==='lost'),fu=L.filter(l=>l.stage==='followup');
-  const rs={};lost.forEach(l=>{const r=l.reason||'לא צוין';rs[r]=(rs[r]||0)+1});
-  const dead=L.filter(l=>l.stage==='dead');h+=`<div class="dz">${[['lost',lost.length],['followup',fu.length],['dead',dead.length]].map(([k,c])=>`<div data-s="${k}" onclick="filt='${k}';draw()">${SN[k]}<br><b>${c}</b></div>`).join('')}</div>`;
-  if(lost.length)h+=`<div class="mut" style="margin-top:4px">סיבות: ${Object.entries(rs).sort((a,b)=>b[1]-a[1]).map(([k,v])=>esc(k)+' ('+v+')').join(' · ')}</div>`;
-  h+=`</div><input id="q" placeholder="חיפוש שם או טלפון" value="${esc(q)}" oninput="q=this.value;list()" style="margin:0 0 8px"><div class="row" style="margin-bottom:8px"><div class="chips" style="margin:0">${[['list','כרטיסים'],['board','עמודות'],['table','טבלה']].map(v=>`<button class="chip ${view===v[0]?'on':''}" onclick="setV('${v[0]}')">${v[1]}</button>`).join('')}</div><button class="btn" onclick="fieldsM()">⚙ שדות</button></div><div class="chips">`+[['all','הכול ('+n+')'],...ST.map(s=>[s[0],s[1]+' ('+L.filter(l=>l.stage===s[0]).length+')'])].map(s=>`<button class="chip ${filt===s[0]?'on':''}" data-s="${s[0]==='all'?'':s[0]}" onclick="filt='${s[0]}';draw()">${s[1]}</button>`).join('')+`</div><div id="list"></div>
-  <button class="btn pri fab" onclick="addM()">+ ליד חדש</button>`;
-  const f=document.activeElement&&document.activeElement.id==='q';
-  $('#app').innerHTML=h;list();
-  if(f){const e=$('#q');e.focus();e.setSelectionRange(q.length,q.length)}
+const reach=i=>L.filter(l=>l.reached>=i).length,mx=Math.max(1,reach(0));
+const nAll=L.filter(l=>l.stage!=='dead').length;
+const side=`<aside class="side"><div class="brand">Studio Balance</div>${[['fall','📊','מפל'],['leads','👥','לידים']].map(([k,i,t])=>`<button class="nv ${page===k?'on':''}" onclick="go('${k}')"><span>${i}</span>${t}</button>`).join('')}<button class="nv" onclick="fieldsM()"><span>⚙</span>שדות</button><button class="nv" onclick="impM()"><span>⬆</span>ייבוא</button><div class="mut st">${mode==='db'?'✓ נשמר במסד נתונים':mode==='local'?'נשמר רק במכשיר הזה':mode==='err'?'שגיאת חיבור':'מתחבר…'}</div></aside>`;
+let main;
+if(page==='fall'){
+const lost=L.filter(l=>l.stage==='lost'),fu=L.filter(l=>l.stage==='followup'),dead=L.filter(l=>l.stage==='dead');
+const rs={};lost.forEach(l=>{const r=l.reason||'לא צוין';rs[r]=(rs[r]||0)+1});
+main=`<h1>מפל לקוחות</h1><p class="mut">לחיצה על שלב פותחת את הלידים שנמצאים בו עכשיו.</p><div class="card">`+IDX.map((k,i)=>{
+const c=reach(i),p=i?reach(i-1):c;
+return `<div class="fun" style="cursor:pointer" onclick="filt='${k}';go('leads')"><div class="t"><span>${SN[k]}</span><b>${c}</b></div><div class="b" style="width:${c/mx*100}%"></div><div class="d">${i?(p?Math.round(c/p*100):0)+'% מהשלב הקודם':'כל הפניות'}</div></div>`}).join('')+
+`<div class="dz">${[['lost',lost.length],['followup',fu.length],['dead',dead.length]].map(([k,c])=>`<div class="${k==='lost'?'lost':''}" onclick="filt='${k}';go('leads')">${SN[k]}<br><b>${c}</b></div>`).join('')}</div>`+
+(lost.length?`<div class="mut bad" style="margin-top:10px">סיבות כשלון: ${Object.entries(rs).sort((a,b)=>b[1]-a[1]).map(([k,v])=>esc(k)+' ('+v+')').join(' · ')}</div>`:'')+`</div>`;
+}else{
+main=`<div class="row" style="margin-bottom:10px;flex-wrap:wrap"><input id="q" placeholder="חיפוש שם או טלפון (Enter לחיפוש מיידי)" value="${esc(qraw)}" oninput="qd(this.value)" onkeydown="if(event.key==='Enter')qd(this.value,1)" style="margin:0;flex:1;min-width:200px"><div class="chips" style="margin:0">${[['list','כרטיסים'],['board','עמודות'],['table','טבלה']].map(v=>`<button class="chip ${view===v[0]?'on':''}" onclick="setV('${v[0]}')">${v[1]}</button>`).join('')}</div><button class="btn pri" onclick="addM()">+ ליד חדש</button></div>`+
+(view==='board'?'':`<div class="chips">${[['all','הכול ('+nAll+')'],...ST.map(x=>[x[0],x[1]+' ('+L.filter(l=>l.stage===x[0]).length+')'])].map(x=>`<button class="chip ${filt===x[0]?'on':''} ${x[0]==='lost'?'negchip':''}" data-s="${x[0]==='all'?'':x[0]}" onclick="filt='${x[0]}';draw()">${x[1]}</button>`).join('')}</div>`)+
+`<div id="list" class="${view==='list'?'cards':''}"></div>`;
 }
+const f=document.activeElement&&document.activeElement.id==='q';
+$('#app').innerHTML=`<div class="shell">${side}<main class="main">${main}</main></div>`;
+if(page==='leads')list();
+if(f){const e=$('#q');if(e){e.focus();e.setSelectionRange(qraw.length,qraw.length)}}
+}
+function go(p){page=p;draw();scrollTo(0,0)}
+function qd(v,now){qraw=v;clearTimeout(qt);const run=()=>{q=v;list()};now?run():qt=setTimeout(run,450)}
+const tc=x=>x==='lost'?'lost':['followup','dead'].includes(x)?'x':'';
 function list(){if(L.length){if(view==='board')return board();if(view==='table')return table()}
   const s=q.trim().toLowerCase();
   const R=L.filter(l=>(filt==='all'?l.stage!=='dead':l.stage===filt)&&(!s||(l.name||'').toLowerCase().includes(s)||ph(l.phone).includes(s.replace(/\D/g,'')||'§'))).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
-  $('#list').innerHTML=R.length?R.map(l=>`<div class="card lead"><span class="grip" onpointerdown="dstart(event,'${l.id}')">⠿</span><div style="flex:1" onclick="openL('${l.id}')"><div class="nm">${esc(l.name)}</div><div class="mut">📞 ${esc(l.phone)} · 📅 ${fd(l.date)}${l.src?' · '+esc(l.src):''}</div>${l.note?`<div class="mut">${esc(l.note.slice(0,60))}</div>`:''}</div><div onclick="openL('${l.id}')" style="text-align:end"><span class="tag ${['lost','followup','dead'].includes(l.stage)?'x':''}">${SN[l.stage]}</span>${heat(l)}</div></div>`).join(''):
+  $('#list').innerHTML=R.length?R.map(l=>`<div class="card lead"><span class="grip" onpointerdown="dstart(event,'${l.id}')">⠿</span><div style="flex:1" onclick="openL('${l.id}')"><div class="nm">${esc(l.name)}</div><div class="mut">📞 ${esc(l.phone)} · 📅 ${fd(l.date)}${l.src?' · '+esc(l.src):''}</div>${l.note?`<div class="mut">${esc(l.note.slice(0,60))}</div>`:''}</div><div onclick="openL('${l.id}')" style="text-align:end"><span class="tag ${tc(l.stage)}">${SN[l.stage]}</span>${heat(l)}</div></div>`).join(''):
   `<div class="empty">${L.length?'אין תוצאות':'עדיין אין לקוחות.<br>הוסף ליד, או הדבק את הטבלה מהאקסל.'}<br><br><button class="btn" onclick="impM()">ייבוא מאקסל</button></div>`;
 }
 const OPEN=['new','phone','booked','attended'];
@@ -107,10 +132,16 @@ const srch=l=>{const s=q.trim().toLowerCase();return !s||(l.name||'').toLowerCas
 const byD=(a,b)=>(b.date||'').localeCompare(a.date||'');
 function setV(v){view=v;try{localStorage.setItem('sb_view',v)}catch(e){}draw()}
 function board(){const R=L.filter(srch);
-$('#list').innerHTML=`<div class="cols">`+ST.map(([k,t])=>{const C=R.filter(l=>l.stage===k).sort(byD);return `<div class="col" data-s="${k}"><h3>${t} (${C.length})</h3>${C.map(l=>`<div class="card lead" style="padding:10px"><span class="grip" onpointerdown="dstart(event,'${l.id}')">⠿</span><div style="flex:1" onclick="openL('${l.id}')"><div class="nm" style="font-size:15px">${esc(l.name)}</div><div class="mut">${esc(l.phone)}<br>${fd(l.date)}</div>${heat(l)}</div></div>`).join('')||'<div class="mut">ריק</div>'}</div>`}).join('')+`</div>`}
-function table(){const R=L.filter(l=>(filt==='all'?l.stage!=='dead':l.stage===filt)&&srch(l)).sort(byD);
+$('#list').innerHTML=`<div class="cols">`+ST.map(([k,t])=>{const C=R.filter(l=>l.stage===k).sort(byD);return `<div class="col ${k==='lost'?'negc':''}" data-s="${k}"><h3>${t} (${C.length})</h3>${C.map(l=>`<div class="card lead" style="padding:10px"><span class="grip" onpointerdown="dstart(event,'${l.id}')">⠿</span><div style="flex:1" onclick="openL('${l.id}')"><div class="nm" style="font-size:15px">${esc(l.name)}</div><div class="mut">${esc(l.phone)}<br>${fd(l.date)}</div>${heat(l)}</div></div>`).join('')||'<div class="mut">ריק</div>'}</div>`}).join('')+`</div>`}
+function sortT(k){sort=sort.k===k?{k,d:-sort.d}:{k,d:1};list()}
+function table(){const R=L.filter(l=>(filt==='all'?l.stage!=='dead':l.stage===filt)&&srch(l));
 if(!R.length){$('#list').innerHTML='<div class="empty">אין תוצאות</div>';return}
-$('#list').innerHTML=`<div class="card" style="padding:0;overflow-x:auto"><table><tr><th>שם</th><th>טלפון</th><th>תאריך</th><th>שלב</th><th>מקור</th>${F.map(f=>`<th>${esc(f.name)}</th>`).join('')}<th>תיעוד</th></tr>${R.map(l=>`<tr class="r" onclick="openL('${l.id}')"><td><b>${esc(l.name)}</b></td><td>${esc(l.phone)}</td><td>${fd(l.date)}</td><td>${SN[l.stage]}</td><td>${esc(l.src)}</td>${F.map(f=>{const v=(l.cf||{})[f.id];return `<td>${esc(f.type==='date'?fd(v):v)}</td>`}).join('')}<td>${esc((l.note||'').slice(0,40))}</td></tr>`).join('')}</table></div>`}
+const C=[{k:'name',t:'שם',v:l=>l.name||'',r:l=>`<b>${esc(l.name)}</b>`},{k:'phone',t:'טלפון',v:l=>l.phone||''},{k:'date',t:'תאריך',v:l=>l.date||'',r:l=>fd(l.date)},{k:'stage',t:'שלב',v:l=>ST.findIndex(x=>x[0]===l.stage),r:l=>`<span class="tag ${tc(l.stage)}">${SN[l.stage]}</span>`},{k:'src',t:'מקור',v:l=>l.src||''},
+...F.map(f=>({k:'f'+f.id,t:f.name,v:l=>(l.cf||{})[f.id]??'',r:l=>{const v=(l.cf||{})[f.id];return esc(f.type==='date'?fd(v):v)}})),
+{k:'upd',t:'עדכון אחרון',v:l=>l.upd||l.date||'',r:l=>fd(l.upd||l.date)},{k:'note',t:'תיעוד',v:l=>l.note||'',r:l=>esc((l.note||'').slice(0,50))}];
+const c=C.find(x=>x.k===sort.k)||C[2];
+R.sort((a,b)=>{const x=c.v(a),y=c.v(b),ex=x===''||x==null,ey=y===''||y==null;if(ex&&ey)return 0;if(ex)return 1;if(ey)return -1;return(typeof x==='number'&&typeof y==='number'?x-y:String(x).localeCompare(String(y),'he'))*sort.d});
+$('#list').innerHTML=`<div class="card" style="padding:0;overflow-x:auto"><table><tr>${C.map(x=>`<th class="sh" onclick="sortT('${x.k}')">${esc(x.t)} ${sort.k===x.k?(sort.d>0?'▲':'▼'):''}</th>`).join('')}</tr>${R.map(l=>`<tr class="r" onclick="openL('${l.id}')">${C.map(x=>`<td>${x.r?x.r(l):esc(x.v(l))}</td>`).join('')}</tr>`).join('')}</table></div>`}
 function saveF(){if(db)db.doc('config/fields').set({list:F}).catch(()=>alert('השמירה נכשלה'));else try{localStorage.setItem('sb_fields',JSON.stringify(F))}catch(e){}draw()}
 const cfIn=(l,f)=>{const v=(l.cf||{})[f.id]??'';const oc=`onchange="saveCF('${l.id}')"`;
 const el=f.type==='choice'?`<select id="cf_${f.id}" ${oc}><option value=""></option>${(f.opts||[]).map(o=>`<option ${o===v?'selected':''}>${esc(o)}</option>`).join('')}</select>`:`<input id="cf_${f.id}" type="${f.type==='number'?'number':f.type==='date'?'date':'text'}" value="${esc(v)}" ${oc}>`;
@@ -142,7 +173,7 @@ function openL(id){
   const msg=`היי ${l.name} 😊\n\nשובצת לשיעור ניסיון בתאריך ${fd(l.tDate)||'__'}\nבשעה ${l.tTime||'__'}\n\n*יש לחתום על הצהרת הבריאות בלינק המצורף טרם הגעתך לשיעור. 🖊️\n\n*שינוי מועד השיבוץ עד 24 שעות לפני.\n\nאין זיכוי על שיעור ניסיון-ניתן לממש עד שבועיים מיום הרכישה.\n\n*כתובת הסטודיו-כוכב הים 14 חופית. 🗺️\n\n*מומלץ להגיע כמה דקות לפני השיעור כדי להתמקם בנחת.\n\nתהנה 🌻\n\nhttps://docs.google.com/forms/d/e/1FAIpQLScahNXAH30hvVKIMrVCvCfXevrNtOkuIBmK8J9zzBF-QCGzOQ/viewform?usp=dialog`;
   modal(`<div class="row"><h2 style="margin:0">${esc(l.name)}</h2><a class="btn" href="tel:${esc(l.phone)}">📞 ${esc(l.phone)}</a></div>
   <div class="mut" style="margin-top:6px">נכנס ב-${fd(l.date)}${l.src?' · '+esc(l.src):''}</div>
-  <div class="mut" style="margin-top:12px">שלב</div><div class="g">${ST.map(s=>`<button class="btn ${l.stage===s[0]?'on':''}" onclick="setSt('${id}','${s[0]}')">${s[1]}</button>`).join('')}</div>
+  <div class="mut" style="margin-top:12px">שלב</div><div class="g">${ST.map(s=>`<button class="btn ${l.stage===s[0]?'on':''} ${s[0]==='lost'?'neg':''}" onclick="setSt('${id}','${s[0]}')">${s[1]}</button>`).join('')}</div>
   ${l.stage==='lost'?`<div class="mut" style="margin-top:12px">סיבה</div><div class="g">${REA.map(r=>`<button class="btn ${l.reason===r?'on':''}" onclick="setR('${id}','${r}')">${r}</button>`).join('')}</div>`:''}
   ${F.length?`<div class="mut" style="margin-top:12px">פרטים נוספים</div><div class="g">${F.map(f=>cfIn(l,f)).join('')}</div>`:''}<div class="mut" style="margin-top:12px">תיעוד שיחה</div><textarea id="nt" rows="3" onblur="saveN('${id}')">${esc(l.note)}</textarea>
   <div class="mut" style="margin-top:12px">שיעור ניסיון</div><div class="g"><input id="td" type="date" value="${l.tDate||''}" onchange="saveT('${id}')"><input id="tt" type="time" value="${l.tTime||''}" onchange="saveT('${id}')"></div>
