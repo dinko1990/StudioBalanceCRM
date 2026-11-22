@@ -77,37 +77,59 @@ let L=[],F=[],db=null,mode='...',filt='all',q='';
 let view=(()=>{try{return localStorage.getItem('sb_view')}catch(e){return null}})()||'list';
 const LS='sb_leads';
 // ---- storage: shared DB if available, else this device only
-let sb=null;
+let sb=null,ME=null,LE='';
+const np=p=>{const d=String(p||'').replace(/\D/g,'');return d.startsWith('972')?'0'+d.slice(3):(d.length===9&&d[0]==='5')?'0'+d:d};
 async function init(){
   if(!(SUPABASE_URL&&SUPABASE_ANON_KEY&&window.supabase))return initClaude();
   sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
   const{data}=await sb.auth.getSession();
   data.session?startSb():loginUI();
 }
-function loginUI(msg){
-  $('#app').innerHTML=`<div style="max-width:380px;margin:12vh auto;padding:0 16px"><div class="card"><h1>Studio Balance</h1><p class="mut">כניסה למערכת</p><input id="em" type="email" placeholder="אימייל" autocomplete="username"><input id="pw" type="password" placeholder="סיסמה" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"><button class="btn pri full" onclick="doLogin()">כניסה</button><div class="mut bad" id="lm">${esc(msg||'')}</div></div></div>`;
-}
-async function doLogin(){
-  const{error}=await sb.auth.signInWithPassword({email:$('#em').value.trim(),password:$('#pw').value});
-  if(error)return loginUI('אימייל או סיסמה שגויים');
-  startSb();
-}
+function loginUI(msg,step){const code=step==='code';
+$('#app').innerHTML=`<div style="max-width:380px;margin:12vh auto;padding:0 16px"><div class="card"><h1>Studio Balance</h1><p class="mut">${code?'שלחנו קוד חד-פעמי אל '+esc(LE):'כניסה עם קוד חד-פעמי באימייל'}</p>${code?`<input id="cd" inputmode="numeric" autocomplete="one-time-code" placeholder="הקוד מהאימייל" onkeydown="if(event.key==='Enter')verifyCode()"><button class="btn pri full" onclick="verifyCode()">כניסה</button><button class="btn full" onclick="loginUI()">שינוי אימייל</button>`:`<input id="em" type="email" autocomplete="email" placeholder="אימייל" onkeydown="if(event.key==='Enter')sendCode()"><button class="btn pri full" onclick="sendCode()">שליחת קוד</button>`}<div class="mut bad" style="margin-top:8px">${esc(msg||'')}</div></div></div>`}
+async function sendCode(){const em=$('#em').value.trim().toLowerCase();if(!em)return;LE=em;
+const{error}=await sb.auth.signInWithOtp({email:em,options:{shouldCreateUser:true}});
+if(error)return loginUI('לא הצלחנו לשלוח קוד: '+error.message);loginUI('','code')}
+async function verifyCode(){const t=$('#cd').value.replace(/\s/g,'');
+const{error}=await sb.auth.verifyOtp({email:LE,token:t,type:'email'});
+if(error)return loginUI('קוד שגוי או שפג תוקפו','code');startSb()}
 async function logout(){await sb.auth.signOut();location.reload()}
 async function startSb(){
   $('#app').innerHTML='<div class="empty">טוען…</div>';
-  const{data:mem,error}=await sb.from('memberships').select('org_id').limit(1);
+  await sb.rpc('join_by_invite');
+  const{data:{user}}=await sb.auth.getUser();
+  let{data:mem,error}=await sb.from('memberships').select('org_id,role').eq('user_id',user.id).limit(1);
   if(error){mode='err';draw();return}
-  let org=mem&&mem[0]&&mem[0].org_id;
-  if(!org){
-    const name=prompt('שם הסטודיו?','Studio Balance');if(!name)return;
+  if(!mem.length){
+    const{data:need}=await sb.rpc('setup_needed');
+    if(!need){$('#app').innerHTML=`<div style="max-width:380px;margin:12vh auto;padding:0 16px"><div class="card"><h2>אין לך גישה עדיין</h2><p class="mut">${esc(user.email)} לא מוזמן. בקש מבעל הסטודיו להזמין אותך, ואז היכנס שוב.</p><button class="btn full" onclick="logout()">יציאה</button></div></div>`;return}
+    const name=prompt('שם הסטודיו?','Studio Balance');if(!name)return logout();
     const{data:o,error:e2}=await sb.rpc('create_org',{org_name:name});
     if(e2){alert(e2.message);mode='err';draw();return}
-    org=o;
+    mem=[{org_id:o,role:'owner'}];
   }
-  db=mkDb(sb,org);mode='db';
+  ME={org:mem[0].org_id,role:mem[0].role,uid:user.id};
+  db=mkDb(sb,ME.org);mode='db';
   db.doc('config/fields').onSnapshot(s=>{F=(s.exists&&s.data().list)||[];draw()},()=>{});
   db.collection('leads').onSnapshot(s=>{L=s.docs.map(x=>({...x.data(),id:x.id}));mode='db';draw()},()=>{mode='err';draw()});
 }
+// ---- users page (owner/admin)
+async function loadUsers(){
+  const[{data:mem},{data:inv}]=await Promise.all([sb.from('memberships').select('user_id,email,role').eq('org_id',ME.org),sb.from('invites').select('id,email,role').eq('org_id',ME.org)]);
+  const RL={owner:'בעלים',admin:'מנהל',member:'משתמש'};
+  const el=$('#usr');if(!el)return;
+  el.className='';
+  el.innerHTML=`<div class="card"><h2>משתמשים פעילים</h2>${(mem||[]).map(m=>`<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line)"><span>${esc(m.email||'משתמש')} <span class="tag">${RL[m.role]}</span>${m.user_id===ME.uid?' <span class="mut">(אתה)</span>':''}</span>${m.role!=='owner'&&m.user_id!==ME.uid?`<button class="btn" style="color:var(--bad)" onclick="rmMember('${m.user_id}')">הסרה</button>`:''}</div>`).join('')}</div>
+  <div class="card"><h2>הזמנות ממתינות</h2>${(inv||[]).map(i=>`<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line)"><span>${esc(i.email)} <span class="tag">${RL[i.role]}</span></span><button class="btn" onclick="rmInvite('${i.id}')">ביטול</button></div>`).join('')||'<div class="mut">אין הזמנות ממתינות.</div>'}
+  <h2 style="margin-top:16px">הזמנת משתמש</h2><p class="mut">המוזמן נכנס עם האימייל הזה וקוד חד-פעמי, ומצטרף אוטומטית.</p>
+  <input id="ie" type="email" placeholder="אימייל"><select id="ir"><option value="member">משתמש (לידים בלבד)</option><option value="admin">מנהל (גם ניהול משתמשים)</option></select><button class="btn pri full" onclick="addInvite()">שליחת הזמנה</button></div>`;
+}
+async function addInvite(){const email=$('#ie').value.trim().toLowerCase();if(!email)return;
+  const{error}=await sb.from('invites').insert({org_id:ME.org,email,role:$('#ir').value});
+  if(error)return alert(error.code==='23505'?'כבר הוזמן אימייל זה':'שגיאה: '+error.message);loadUsers()}
+async function rmInvite(id){await sb.from('invites').delete().eq('id',id);loadUsers()}
+async function rmMember(uid){if(!confirm('להסיר את המשתמש? הוא לא יוכל להיכנס יותר.'))return;
+  const{error}=await sb.from('memberships').delete().eq('org_id',ME.org).eq('user_id',uid);if(error)alert(error.message);loadUsers()}
 // Adapter: exposes the small API the UI uses on top of Supabase tables.
 function mkDb(sb,org){
   const today=()=>new Date().toISOString().slice(0,10);
@@ -120,6 +142,12 @@ function mkDb(sb,org){
     w.forEach(([ok,no])=>error?no(error):ok())};
   const watch=(table,fn)=>{let t;sb.channel(table+org).on('postgres_changes',{event:'*',schema:'public',table,filter:'org_id=eq.'+org},()=>{clearTimeout(t);t=setTimeout(fn,300)}).subscribe()};
   return{
+    importRows:async list=>{if(!list.length)return 0;let n=0;
+      const rows=list.map(x=>toRow(x.id,x));
+      for(let i=0;i<rows.length;i+=500){
+        const{data,error}=await sb.from('leads').upsert(rows.slice(i,i+500),{onConflict:'org_id,phone_key',ignoreDuplicates:true}).select('id');
+        if(error){alert('שגיאת ייבוא: '+error.message);break}n+=data.length}
+      reloadL();return n},
     collection:()=>({
       doc:id=>({
         set:o=>new Promise((ok,no)=>{pend.set(id,toRow(id,o));ws.push([ok,no]);clearTimeout(tm);tm=setTimeout(flush,60)}),
@@ -175,7 +203,7 @@ const ph=p=>String(p||'').replace(/\D/g,'');
 function draw(){
 const reach=i=>L.filter(l=>l.reached>=i).length,mx=Math.max(1,reach(0));
 const nAll=L.filter(l=>l.stage!=='dead').length;
-const side=`<aside class="side"><div class="brand">Studio Balance</div>${[['fall','📊','מפל'],['leads','👥','לידים']].map(([k,i,t])=>`<button class="nv ${page===k?'on':''}" onclick="go('${k}')"><span>${i}</span>${t}</button>`).join('')}<button class="nv" onclick="fieldsM()"><span>⚙</span>שדות</button><button class="nv" onclick="impM()"><span>⬆</span>ייבוא</button><button class="nv" onclick="exportCSV()"><span>⬇</span>ייצוא</button>${sb?'<button class="nv" onclick="logout()"><span>⎋</span>יציאה</button>':''}<div class="mut st">${mode==='db'?'✓ נשמר במסד נתונים':mode==='local'?'נשמר רק במכשיר הזה':mode==='err'?'שגיאת חיבור':'מתחבר…'}</div></aside>`;
+const side=`<aside class="side"><div class="brand">Studio Balance</div>${[['fall','📊','מפל'],['leads','👥','לידים']].map(([k,i,t])=>`<button class="nv ${page===k?'on':''}" onclick="go('${k}')"><span>${i}</span>${t}</button>`).join('')}<button class="nv" onclick="fieldsM()"><span>⚙</span>שדות</button><button class="nv" onclick="impM()"><span>⬆</span>ייבוא</button><button class="nv" onclick="exportCSV()"><span>⬇</span>ייצוא</button>${sb&&ME&&ME.role!=='member'?`<button class="nv ${page==='users'?'on':''}" onclick="go('users')"><span>👤</span>משתמשים</button>`:''}${sb?'<button class="nv" onclick="logout()"><span>⎋</span>יציאה</button>':''}<div class="mut st">${mode==='db'?'✓ נשמר במסד נתונים':mode==='local'?'נשמר רק במכשיר הזה':mode==='err'?'שגיאת חיבור':'מתחבר…'}</div></aside>`;
 let main;
 if(page==='fall'){
 const lost=L.filter(l=>l.stage==='lost'),fu=L.filter(l=>l.stage==='followup'),dead=L.filter(l=>l.stage==='dead');
@@ -185,6 +213,8 @@ const c=reach(i),p=i?reach(i-1):c;
 return `<div class="fun" style="cursor:pointer" onclick="filt='${k}';go('leads')"><div class="t"><span>${SN[k]}</span><b>${c}</b></div><div class="b" style="width:${c/mx*100}%"></div><div class="d">${i?(p?Math.round(c/p*100):0)+'% מהשלב הקודם':'כל הפניות'}</div></div>`}).join('')+
 `<div class="dz">${[['lost',lost.length],['followup',fu.length],['dead',dead.length]].map(([k,c])=>`<div class="${k==='lost'?'lost':''}" onclick="filt='${k}';go('leads')">${SN[k]}<br><b>${c}</b></div>`).join('')}</div>`+
 (lost.length?`<div class="mut bad" style="margin-top:10px">סיבות כשלון: ${Object.entries(rs).sort((a,b)=>b[1]-a[1]).map(([k,v])=>esc(k)+' ('+v+')').join(' · ')}</div>`:'')+`</div>`;
+}else if(page==='users'){
+main='<h1>משתמשים</h1><div id="usr" class="empty">טוען…</div>';
 }else{
 main=`<div class="row" style="margin-bottom:10px;flex-wrap:wrap"><input id="q" placeholder="חיפוש שם או טלפון (Enter לחיפוש מיידי)" value="${esc(qraw)}" oninput="qd(this.value)" onkeydown="if(event.key==='Enter')qd(this.value,1)" style="margin:0;flex:1;min-width:200px"><div class="chips" style="margin:0">${[['list','כרטיסים'],['board','עמודות'],['table','טבלה']].map(v=>`<button class="chip ${view===v[0]?'on':''}" onclick="setV('${v[0]}')">${v[1]}</button>`).join('')}</div><button class="btn pri" onclick="addM()">+ ליד חדש</button></div>`+
 (view==='board'?'':`<div class="chips">${[['all','הכול ('+nAll+')'],...ST.map(x=>[x[0],x[1]+' ('+L.filter(l=>l.stage===x[0]).length+')'])].map(x=>`<button class="chip ${filt===x[0]?'on':''} ${x[0]==='lost'?'negchip':''}" data-s="${x[0]==='all'?'':x[0]}" onclick="filt='${x[0]}';draw()">${x[1]}</button>`).join('')}</div>`)+
@@ -193,6 +223,7 @@ main=`<div class="row" style="margin-bottom:10px;flex-wrap:wrap"><input id="q" p
 const f=document.activeElement&&document.activeElement.id==='q';
 $('#app').innerHTML=`<div class="shell">${side}<main class="main">${main}</main></div>`;
 if(page==='leads')list();
+if(page==='users')loadUsers();
 if(f){const e=$('#q');if(e){e.focus();e.setSelectionRange(qraw.length,qraw.length)}}
 }
 function go(p){page=p;draw();scrollTo(0,0)}
@@ -245,9 +276,9 @@ function addM(){
 function saveNew(){
   const name=$('#n').value.trim(),phone=$('#p').value.trim();
   if(!name||!phone){alert('חסר שם או טלפון');return}
-  const dup=L.find(l=>ph(l.phone)===ph(phone));
+  const dup=L.find(l=>np(l.phone)===np(phone));
   if(dup&&!confirm('המספר כבר קיים ('+dup.name+'). להוסיף בכל זאת?'))return;
-  put({id:uid(),name,phone,src:$('#s').value,date:$('#d').value||iso(),stage:'new',reached:0,note:''});closeM();
+  put({id:uid(),name,phone:np(phone),src:$('#s').value,date:$('#d').value||iso(),stage:'new',reached:0,note:''});closeM();
 }
 function openL(id){
   const l=L.find(x=>x.id===id);
@@ -296,12 +327,12 @@ if(hasH){const h=rows.shift();m={};h.forEach((c,i)=>{const f=F.find(f=>f.name===
 if(m.name===undefined){const used=[...Object.values(m),...Object.values(cfm)];const i=h.findIndex((_,i)=>!used.includes(i));if(i>=0)m.name=i}
 if(m.note===undefined){const used=[...Object.values(m),...Object.values(cfm)];let best=-1,bl=0;h.forEach((_,i)=>{if(used.includes(i))return;const len=rows.reduce((t,r)=>t+(r[i]||'').length,0);if(len>bl){bl=len;best=i}});if(best>=0)m.note=best}}
 if(m.name===undefined||m.phone===undefined){alert('לא נמצאו עמודות שם וטלפון');return}
-const seen=new Set(L.map(l=>ph(l.phone)));let a=0,sk=0,up=0;
+const seen=new Map(L.map(l=>[np(l.phone),l]));let sk=0,up=0;const fresh=[];
 rows.forEach(r=>{const g=k=>m[k]===undefined?'':(r[m[k]]||'');
-const name=g('name');let p=ph(g('phone'));if(p.length===9&&p[0]==='5')p='0'+p;
+const name=g('name'),p=np(g('phone'));
 if(!name||p.length<9){sk++;return}
-if(seen.has(p)){const ex=L.find(l=>ph(l.phone)===p),nt=g('note');if(ex&&nt&&!ex.note){ex.note=nt;up++;if(db){const{id,...o}=ex;db.collection('leads').doc(id).set(o).catch(()=>{})}}else sk++;return}
-seen.add(p);
+if(seen.has(p)){const ex=seen.get(p),nt=g('note');
+ if(nt&&!ex.note&&!fresh.includes(ex)){ex.note=nt;up++;if(db){const{id,...o}=ex;db.collection('leads').doc(id).set(o).catch(()=>{})}}else sk++;return}
 const stat=g('stat'),note=g('note');
 const st=(ST.find(s=>stat&&(stat.includes(s[1])||s[1].includes(stat)))||['new'])[0];
 const x={id:uid(),name,phone:p,date:pd(g('date')),upd:pd(g('date')),src:ns(g('src')),stage:st,reached:Math.max(0,IDX.indexOf(st)),note};
@@ -309,10 +340,13 @@ const cf={};F.forEach(f=>{const v=cfm[f.id]!==undefined?r[cfm[f.id]]:'';if(v)cf[
 if(Object.keys(cf).length)x.cf=cf;
 if(st==='lost'){const rr=REA.find(z=>note.includes(z));x.reason=g('reason')||rr||'אחר'}
 const rc=parseInt(g('reach'));if(rc>=0&&rc<=4)x.reached=Math.max(x.reached,rc);
-L.push(x);a++;
-if(db){const{id,...o}=x;db.collection('leads').doc(id).set(o).catch(()=>{})}});
+seen.set(p,x);fresh.push(x)});
+const done=n=>alert(`נוספו ${n} לידים חדשים. תיעוד הושלם ב-${up} קיימים. דולגו ${sk} (טלפון קיים או חסר פרטים).`);
+closeM();
+if(db&&db.importRows){db.importRows(fresh).then(done);return}
+fresh.forEach(x=>{L.push(x);if(db){const{id,...o}=x;db.collection('leads').doc(id).set(o).catch(()=>{})}});
 if(!db)try{localStorage.setItem(LS,JSON.stringify(L))}catch(e){}
-closeM();draw();alert(`נוספו ${a}. תיעוד הושלם ב-${up} לידים קיימים. דולגו ${sk} (כפולים או חסרי פרטים).`)}
+draw();done(fresh.length)}
 init();draw();
 </script>
 </body></html>
