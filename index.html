@@ -59,12 +59,15 @@ table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:10px 8px;
 </style>
 </head>
 <body><div class="wrap" id="app"></div><div id="m"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
+// ===== Supabase settings: paste YOUR values (Project Settings -> API). The anon/publishable key is meant to be public. NEVER paste the service_role key here. =====
+const SUPABASE_URL='',SUPABASE_ANON_KEY='';
 const $=s=>document.querySelector(s);
 const esc=t=>String(t??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const iso=(d=new Date())=>d.toISOString().slice(0,10);
 const fd=s=>s?s.split('-').reverse().join('/'):'';
-const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const uid=()=>crypto.randomUUID();
 const ST=[['new','ליד חדש'],['phone','שיחת טלפון'],['booked','אימון מתואם'],['attended','אימון בפועל'],['closed','סגירה'],['lost','כשלון'],['followup','צריך לחזור'],['dead','ליד שמת']];
 const SN=Object.fromEntries(ST);const IDX=['new','phone','booked','attended','closed'];
 const SRC=['וואטסאפ','ממומן (מטא)','דרך מישהו/י'];
@@ -74,7 +77,86 @@ let L=[],F=[],db=null,mode='...',filt='all',q='';
 let view=(()=>{try{return localStorage.getItem('sb_view')}catch(e){return null}})()||'list';
 const LS='sb_leads';
 // ---- storage: shared DB if available, else this device only
+let sb=null;
 async function init(){
+  if(!(SUPABASE_URL&&SUPABASE_ANON_KEY&&window.supabase))return initClaude();
+  sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+  const{data}=await sb.auth.getSession();
+  data.session?startSb():loginUI();
+}
+function loginUI(msg){
+  $('#app').innerHTML=`<div style="max-width:380px;margin:12vh auto;padding:0 16px"><div class="card"><h1>Studio Balance</h1><p class="mut">כניסה למערכת</p><input id="em" type="email" placeholder="אימייל" autocomplete="username"><input id="pw" type="password" placeholder="סיסמה" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"><button class="btn pri full" onclick="doLogin()">כניסה</button><div class="mut bad" id="lm">${esc(msg||'')}</div></div></div>`;
+}
+async function doLogin(){
+  const{error}=await sb.auth.signInWithPassword({email:$('#em').value.trim(),password:$('#pw').value});
+  if(error)return loginUI('אימייל או סיסמה שגויים');
+  startSb();
+}
+async function logout(){await sb.auth.signOut();location.reload()}
+async function startSb(){
+  $('#app').innerHTML='<div class="empty">טוען…</div>';
+  const{data:mem,error}=await sb.from('memberships').select('org_id').limit(1);
+  if(error){mode='err';draw();return}
+  let org=mem&&mem[0]&&mem[0].org_id;
+  if(!org){
+    const name=prompt('שם הסטודיו?','Studio Balance');if(!name)return;
+    const{data:o,error:e2}=await sb.rpc('create_org',{org_name:name});
+    if(e2){alert(e2.message);mode='err';draw();return}
+    org=o;
+  }
+  db=mkDb(sb,org);mode='db';
+  db.doc('config/fields').onSnapshot(s=>{F=(s.exists&&s.data().list)||[];draw()},()=>{});
+  db.collection('leads').onSnapshot(s=>{L=s.docs.map(x=>({...x.data(),id:x.id}));mode='db';draw()},()=>{mode='err';draw()});
+}
+// Adapter: exposes the small API the UI uses on top of Supabase tables.
+function mkDb(sb,org){
+  const today=()=>new Date().toISOString().slice(0,10);
+  const toRow=(id,o)=>({id,org_id:org,name:o.name,phone:o.phone,source:o.src||null,received_on:o.date||today(),stage:o.stage||'new',reached:o.reached||0,note:o.note||'',lost_reason:o.reason||null,trial_date:o.tDate||null,trial_time:o.tTime||null,custom:o.cf||{},last_activity:o.upd||null});
+  const fromRow=r=>({name:r.name,phone:r.phone,src:r.source||'',date:r.received_on,stage:r.stage,reached:r.reached,note:r.note||'',reason:r.lost_reason||undefined,tDate:r.trial_date||'',tTime:(r.trial_time||'').slice(0,5),cf:r.custom||{},upd:r.last_activity||r.received_on});
+  let pend=new Map(),ws=[],tm,reloadL=()=>{};
+  const flush=async()=>{const rows=[...pend.values()],w=ws;pend=new Map();ws=[];
+    const{error}=await sb.from('leads').upsert(rows);
+    if(error){alert('שגיאת שמירה: '+error.message);reloadL()}
+    w.forEach(([ok,no])=>error?no(error):ok())};
+  const watch=(table,fn)=>{let t;sb.channel(table+org).on('postgres_changes',{event:'*',schema:'public',table,filter:'org_id=eq.'+org},()=>{clearTimeout(t);t=setTimeout(fn,300)}).subscribe()};
+  return{
+    collection:()=>({
+      doc:id=>({
+        set:o=>new Promise((ok,no)=>{pend.set(id,toRow(id,o));ws.push([ok,no]);clearTimeout(tm);tm=setTimeout(flush,60)}),
+        delete:async()=>{const{error}=await sb.from('leads').delete().eq('id',id);if(error)throw error}
+      }),
+      onSnapshot:(next,err)=>{
+        const load=async()=>{let all=[],from=0;
+          for(;;){const{data,error}=await sb.from('leads').select('*').eq('org_id',org).order('received_on',{ascending:false}).order('id').range(from,from+999);
+            if(error)return err&&err(error);all=all.concat(data);if(data.length<1000)break;from+=1000}
+          next({docs:all.map(r=>({id:r.id,data:()=>fromRow(r)}))})};
+        reloadL=load;load();watch('leads',load);return()=>{}}
+    }),
+    doc:()=>({
+      set:async({list})=>{
+        const rows=list.map((f,i)=>({id:f.id,org_id:org,name:f.name,type:f.type,options:f.opts||[],position:i}));
+        if(rows.length){const{error}=await sb.from('lead_fields').upsert(rows);if(error)throw error}
+        let q=sb.from('lead_fields').delete().eq('org_id',org);
+        if(rows.length)q=q.not('id','in','('+rows.map(r=>r.id).join(',')+')');
+        const{error:e2}=await q;if(e2)throw e2},
+      onSnapshot:(next,err)=>{
+        const load=async()=>{const{data,error}=await sb.from('lead_fields').select('*').eq('org_id',org).order('position');
+          if(error)return err&&err(error);
+          next({exists:true,data:()=>({list:data.map(r=>({id:r.id,name:r.name,type:r.type,opts:r.options||[]}))})})};
+        load();watch('lead_fields',load);return()=>{}}
+    })
+  };
+}
+async function exportCSV(){
+  const hdr=['שם','תאריך','טלפון','סטטוס','מקור','תיעוד','סיבת כשלון','שלב מקסימלי',...F.map(f=>f.name)];
+  const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+  const rows=L.map(l=>[l.name,l.date,l.phone,SN[l.stage],l.src,l.note,l.reason||'',l.reached||0,...F.map(f=>(l.cf||{})[f.id]??'')]);
+  const csv='\uFEFF'+[hdr,...rows].map(r=>r.map(q).join(',')).join('\r\n'),fn='leads-'+iso()+'.csv';
+  let dl=null;try{if(window.claude)dl=await claude.use('downloads')}catch(e){}
+  if(dl)return dl.save({filename:fn,data:csv}).catch(()=>{});
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download=fn;document.body.appendChild(a);a.click();a.remove();
+}
+async function initClaude(){
   try{db=window.claude?await claude.use('db'):null}catch(e){db=null}
   if(db){mode='db';
     const t=setTimeout(()=>{mode='err';draw()},10000);
@@ -83,7 +165,7 @@ async function init(){
 }
 function put(l){
   l.upd=iso();const i=L.findIndex(x=>x.id===l.id);i<0?L.push(l):L[i]=l;
-  if(db){const{id,...r}=l;db.collection('leads').doc(id).set(r).catch(()=>alert('השמירה נכשלה'))}
+  if(db){const{id,...r}=l;db.collection('leads').doc(id).set(r).catch(()=>{})}
   else try{localStorage.setItem(LS,JSON.stringify(L))}catch(e){}
   draw();
 }
@@ -93,7 +175,7 @@ const ph=p=>String(p||'').replace(/\D/g,'');
 function draw(){
 const reach=i=>L.filter(l=>l.reached>=i).length,mx=Math.max(1,reach(0));
 const nAll=L.filter(l=>l.stage!=='dead').length;
-const side=`<aside class="side"><div class="brand">Studio Balance</div>${[['fall','📊','מפל'],['leads','👥','לידים']].map(([k,i,t])=>`<button class="nv ${page===k?'on':''}" onclick="go('${k}')"><span>${i}</span>${t}</button>`).join('')}<button class="nv" onclick="fieldsM()"><span>⚙</span>שדות</button><button class="nv" onclick="impM()"><span>⬆</span>ייבוא</button><div class="mut st">${mode==='db'?'✓ נשמר במסד נתונים':mode==='local'?'נשמר רק במכשיר הזה':mode==='err'?'שגיאת חיבור':'מתחבר…'}</div></aside>`;
+const side=`<aside class="side"><div class="brand">Studio Balance</div>${[['fall','📊','מפל'],['leads','👥','לידים']].map(([k,i,t])=>`<button class="nv ${page===k?'on':''}" onclick="go('${k}')"><span>${i}</span>${t}</button>`).join('')}<button class="nv" onclick="fieldsM()"><span>⚙</span>שדות</button><button class="nv" onclick="impM()"><span>⬆</span>ייבוא</button><button class="nv" onclick="exportCSV()"><span>⬇</span>ייצוא</button>${sb?'<button class="nv" onclick="logout()"><span>⎋</span>יציאה</button>':''}<div class="mut st">${mode==='db'?'✓ נשמר במסד נתונים':mode==='local'?'נשמר רק במכשיר הזה':mode==='err'?'שגיאת חיבור':'מתחבר…'}</div></aside>`;
 let main;
 if(page==='fall'){
 const lost=L.filter(l=>l.stage==='lost'),fu=L.filter(l=>l.stage==='followup'),dead=L.filter(l=>l.stage==='dead');
@@ -207,7 +289,7 @@ const ns=s=>/ממומן/.test(s)?'ממומן (מטא)':/צאפ|טסאפ/.test(s)
 function pd(s){if(/^\d{4}-\d{2}-\d{2}/.test(s))return String(s).slice(0,10);const m=String(s||'').trim().match(/^(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?$/);if(!m)return iso();let y=m[3]?+m[3]:new Date().getFullYear();if(y<100)y+=2000;return `${y}-${String(m[2]).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`}
 function doImp(){
 const rows=parseT($('#ix').value);if(!rows.length){alert('אין שורות לייבוא');return}
-const pat={name:/^שם|name/i,date:/תאריך|date/i,phone:/טלפון|נייד|phone/i,stat:/סט|שלב|status/i,src:/מקור|source/i,note:/תי?עוד|תיאור|שיחה|הערה|הערות|note/i};
+const pat={name:/^שם|name/i,date:/תאריך|date/i,phone:/טלפון|נייד|phone/i,stat:/סט|שלב|status/i,src:/מקור|source/i,note:/תי?עוד|תיאור|שיחה|הערה|הערות|note/i,reason:/סיבה|סיבת|reason/i,reach:/מקסימלי|reached/i};
 const hasH=rows[0].some(c=>/טלפון|תאריך|שם|סט|phone|name/i.test(c))&&!rows[0].some(c=>/^[\d\s+-]{9,}$/.test(c));
 let m={name:0,date:1,phone:2,stat:3,src:4,note:5},cfm={};
 if(hasH){const h=rows.shift();m={};h.forEach((c,i)=>{const f=F.find(f=>f.name===c);if(f){cfm[f.id]=i;return}const k=Object.keys(pat).find(k=>m[k]===undefined&&pat[k].test(c));if(k)m[k]=i});
@@ -225,7 +307,8 @@ const st=(ST.find(s=>stat&&(stat.includes(s[1])||s[1].includes(stat)))||['new'])
 const x={id:uid(),name,phone:p,date:pd(g('date')),upd:pd(g('date')),src:ns(g('src')),stage:st,reached:Math.max(0,IDX.indexOf(st)),note};
 const cf={};F.forEach(f=>{const v=cfm[f.id]!==undefined?r[cfm[f.id]]:'';if(v)cf[f.id]=f.type==='number'?(+v||v):f.type==='date'?pd(v):v});
 if(Object.keys(cf).length)x.cf=cf;
-if(st==='lost'){const rr=REA.find(z=>note.includes(z));x.reason=rr||'אחר'}
+if(st==='lost'){const rr=REA.find(z=>note.includes(z));x.reason=g('reason')||rr||'אחר'}
+const rc=parseInt(g('reach'));if(rc>=0&&rc<=4)x.reached=Math.max(x.reached,rc);
 L.push(x);a++;
 if(db){const{id,...o}=x;db.collection('leads').doc(id).set(o).catch(()=>{})}});
 if(!db)try{localStorage.setItem(LS,JSON.stringify(L))}catch(e){}
