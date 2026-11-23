@@ -77,6 +77,16 @@ table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:10px 8px;
 .xl td,.xl th{border:1px solid var(--line)}.xl td{padding:0}
 .xl td input,.xl td select,.xl .flt input,.xl .flt select{margin:0;border:0;border-radius:0;background:transparent;padding:8px;min-width:110px;width:100%}
 .xl td input:focus,.xl td select:focus{outline:2px solid var(--pri);outline-offset:-2px;background:var(--pri2)}
+.stg{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.sc{padding:4px 11px;font-size:12.5px;border-radius:99px;border:1px solid var(--line);background:var(--card);cursor:pointer;line-height:1.4}
+.sc:hover{border-color:var(--pri)}.sc.on{background:var(--pri2);border-color:var(--pri);color:var(--pri);font-weight:600}
+.sc.neg{color:var(--bad);border-color:var(--bad)}.sc.neg.on{background:rgba(220,38,38,.12)}
+.sc.pos{color:var(--good);border-color:var(--good)}.sc.pos.on{background:rgba(22,163,74,.15)}
+.btn.sm{padding:3px 9px}.fr{padding:8px 0;border-top:1px solid var(--line)}
+.cards.set{grid-template-columns:repeat(auto-fit,minmax(340px,1fr))}
+pre.pv{white-space:pre-wrap;word-break:break-word;font:inherit;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px;margin:6px 0 0;max-height:260px;overflow:auto}
+.md input,.md select,.md textarea{padding:9px;margin-top:4px}
+@media(max-width:760px){.side{overflow-x:auto}.nv{white-space:nowrap}}
 </style>
 </head>
 <body><div class="wrap" id="app"></div><div id="m"></div>
@@ -500,6 +510,179 @@ function draw(){
   const nw=document.querySelector('.tw,.cards,.cols');if(nw&&sp){nw.scrollTop=sp[0];nw.scrollLeft=sp[1]}
   if(f){const e=$('#q');if(e){e.focus();e.setSelectionRange(qraw.length,qraw.length)}}
 }
+/* ===== v3: settings page, lead card layout, message template, customers ===== */
+const DEFTPL=`היי {שם} 😊
+
+שובצת לשיעור ניסיון בתאריך {תאריך_שיעור}
+בשעה {שעה}
+
+*יש לחתום על הצהרת הבריאות בלינק המצורף טרם הגעתך לשיעור. 🖊️
+
+*שינוי מועד השיבוץ עד 24 שעות לפני.
+
+אין זיכוי על שיעור ניסיון-ניתן לממש עד שבועיים מיום הרכישה.
+
+*כתובת הסטודיו-כוכב הים 14 חופית. 🗺️
+
+*מומלץ להגיע כמה דקות לפני השיעור כדי להתמקם בנחת.
+
+תהנה 🌻
+
+https://docs.google.com/forms/d/e/1FAIpQLScahNXAH30hvVKIMrVCvCfXevrNtOkuIBmK8J9zzBF-QCGzOQ/viewform?usp=dialog`;
+let TPL=DEFTPL,tplDraft=null,cq='';
+try{TPL=localStorage.getItem('sb_tpl')||DEFTPL}catch(e){}
+const RES=['שם','טלפון','תאריך_שיעור','שעה','תאריך_ליד','מקור'];
+const TY={text:'טקסט',number:'מספר',date:'תאריך',choice:'בחירה'};
+const fdn=s=>s?s.split('-').reverse().map(Number).join('/'):'';
+const wan=p=>ph(p).replace(/^0/,'972');
+const closedOn=l=>(l.cf&&l.cf._closed)||l.upd||l.date||'';
+function fillTpl(t,l){
+  const d={'שם':l.name,'טלפון':l.phone,'תאריך_שיעור':fdn(l.tDate),'שעה':l.tTime,'תאריך_ליד':fdn(l.date),'מקור':l.src};
+  F.forEach(f=>{const v=(l.cf||{})[f.id];d[f.name]=f.type==='date'?fdn(v):v});
+  return t.replace(/\{([^}]+)\}/g,(m,k)=>k in d?((d[k]===undefined||d[k]==='')?'__':d[k]):m)}
+
+// closing a lead stamps the customer-since date
+const _sv=save;save=function(l){if(l.stage==='closed'&&!(l.cf&&l.cf._closed))l.cf={...(l.cf||{}),_closed:lc()};return _sv(l)};
+
+// load shared template
+const _s3=startSb;startSb=async function(){await _s3();if(!ME||ME.msgL)return;ME.msgL=1;
+  try{const{data:o}=await sb.from('orgs').select('msg').eq('id',ME.org).single();if(o&&o.msg)TPL=o.msg}catch(e){}draw()};
+
+// ---- shared field input
+function finput(f,id,v,oc){const a=oc?`onchange="${oc}"`:'';
+  if(f.type==='choice')return `<select id="${id}" ${a}><option value=""></option>${(f.opts||[]).map(o=>`<option ${o===v?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
+  return `<input id="${id}" type="${f.type==='number'?'number':f.type==='date'?'date':'text'}" value="${esc(v)}" ${a}>`}
+
+// ---- new lead (uses the same layout)
+function addM(){modal(`<h2>ליד חדש</h2><input id="n" placeholder="שם"><input id="p" placeholder="טלפון" type="tel">
+  <div class="g"><div><div class="mut">תאריך ליד</div><input id="d" type="date" value="${iso()}"></div>
+  <div><div class="mut">שלב</div><select id="ns">${ST.map(([k,t])=>`<option value="${k}">${t}</option>`).join('')}</select></div>
+  <div><div class="mut">מקור</div><select id="s">${SRC.map(o=>`<option>${o}</option>`).join('')}</select></div>
+  ${F.map(f=>`<div><div class="mut">${esc(f.name)}</div>${finput(f,'nf_'+f.id,'')}</div>`).join('')}</div>
+  <button class="btn pri full" onclick="saveNew()">שמירה</button>`)}
+function saveNew(){
+  const name=$('#n').value.trim(),phone=$('#p').value.trim();
+  if(!name||!phone){alert('חסר שם או טלפון');return}
+  const p=np(phone);if(p.length<9){alert('טלפון לא תקין');return}
+  const dup=L.find(l=>np(l.phone)===p);if(dup){alert('המספר כבר קיים אצל '+dup.name);return}
+  const st=$('#ns').value,cf={};
+  F.forEach(f=>{const e=$('#nf_'+f.id);if(e&&e.value!=='')cf[f.id]=f.type==='number'?+e.value:e.value});
+  const x={id:uid(),name,phone:p,src:$('#s').value,date:$('#d').value||iso(),stage:st,reached:Math.max(0,IDX.indexOf(st)),note:''};
+  if(Object.keys(cf).length)x.cf=cf;put(x);closeM()}
+
+// ---- lead card (editable, compact stage chips, fields in layout order)
+function editB(id,k,el){const o=L.find(x=>x.id===id),l={...o};let v=el.value.trim();
+  if(k==='phone'){v=np(v);if(v.length<9){alert('טלפון לא תקין');el.value=o.phone;return}
+    if(L.some(x=>x.id!==id&&np(x.phone)===v)){alert('המספר כבר קיים');el.value=o.phone;return}}
+  if((k==='name'||k==='date')&&!v){el.value=o[k];return}
+  l[k]=v;put(l);if(k==='name'||k==='phone')openL(id)}
+function wsend(id,a){saveT(id,1);const l=L.find(x=>x.id===id);a.href='https://wa.me/'+wan(l.phone)+'?text='+encodeURIComponent(fillTpl(TPL,l))}
+function openL(id){const l=L.find(x=>x.id===id);if(!l)return;
+  modal(`<div class="row"><input value="${esc(l.name)}" onchange="editB('${id}','name',this)" style="margin:0;font-weight:700;font-size:17px"><a class="btn" href="tel:${esc(l.phone)}" style="white-space:nowrap">📞</a></div>
+  <div class="g"><div><div class="mut">טלפון</div><input value="${esc(l.phone)}" inputmode="tel" onchange="editB('${id}','phone',this)"></div>
+  <div><div class="mut">תאריך ליד</div><input type="date" value="${esc(l.date)}" onchange="editB('${id}','date',this)"></div></div>
+  <div class="mut" style="margin-top:10px">שלב</div>
+  <div class="stg">${ST.map(([k,t])=>`<button class="sc ${l.stage===k?'on':''} ${k==='lost'?'neg':k==='closed'?'pos':''}" onclick="setSt('${id}','${k}')">${t}</button>`).join('')}</div>
+  ${l.stage==='lost'?`<div class="mut" style="margin-top:8px">סיבה</div><div class="stg">${REA.map(r=>`<button class="sc ${l.reason===r?'on':''}" onclick="setR('${id}','${r}')">${r}</button>`).join('')}</div>`:''}
+  ${l.stage==='closed'?`<div class="good" style="margin-top:8px">✅ לקוח מאז ${fd(closedOn(l))} <button class="btn sm" onclick="openC('${id}')">כרטיס לקוח</button></div>`:''}
+  <div class="g" style="margin-top:10px"><div><div class="mut">מקור</div><select onchange="editB('${id}','src',this)"><option value=""></option>${(SRC.includes(l.src)||!l.src?SRC:[...SRC,l.src]).map(o=>`<option ${o===l.src?'selected':''}>${esc(o)}</option>`).join('')}</select></div>
+  ${F.map(f=>`<div><div class="mut">${esc(f.name)}</div>${finput(f,'cf_'+f.id,(l.cf||{})[f.id]??'',`saveCF('${id}')`)}</div>`).join('')}</div>
+  <div class="mut" style="margin-top:10px">תיעוד שיחה</div><textarea id="nt" rows="3" onblur="saveN('${id}')">${esc(l.note)}</textarea>
+  <div class="mut" style="margin-top:10px">שיעור ניסיון</div><div class="g"><input id="td" type="date" value="${l.tDate||''}" onchange="saveT('${id}')"><input id="tt" type="time" value="${l.tTime||''}" onchange="saveT('${id}')"></div>
+  <a class="btn pri full" target="_blank" rel="noopener" href="#" onclick="wsend('${id}',this)">שליחת הודעת שיבוץ בוואטסאפ</a>
+  <div class="mut">ההודעה נפתחת מוכנה לפי התבנית (שדות ← הודעה), ואתה לוחץ שליחה.</div>`)}
+
+// ---- customers (= closed leads)
+function openC(id){const l=L.find(x=>x.id===id);if(!l)return;const co=closedOn(l),T=lc();
+  const dd=(a,b)=>Math.max(0,Math.round((new Date(b)-new Date(a))/864e5));
+  modal(`<div class="row"><h2 style="margin:0">${esc(l.name)} <span class="tag won">לקוח</span></h2><a class="btn" href="tel:${esc(l.phone)}">📞 ${esc(l.phone)}</a></div>
+  <div class="card" style="margin:10px 0"><div class="g"><div><div class="mut">לקוח מאז</div><b>${fd(co)}</b></div><div><div class="mut">ימים כלקוח</div><b>${dd(co,T)}</b></div>
+  <div><div class="mut">נכנס כליד</div><b>${fd(l.date)}</b></div><div><div class="mut">נסגר אחרי</div><b>${dd(l.date,co)} ימים</b></div>${l.src?`<div><div class="mut">מקור</div><b>${esc(l.src)}</b></div>`:''}</div></div>
+  ${F.length?`<div class="g">${F.map(f=>`<div><div class="mut">${esc(f.name)}</div>${finput(f,'cf_'+f.id,(l.cf||{})[f.id]??'',`saveCF('${id}')`)}</div>`).join('')}</div>`:''}
+  <div class="mut" style="margin-top:10px">הערות</div><textarea id="nt" rows="3" onblur="saveN('${id}')">${esc(l.note)}</textarea>
+  <a class="btn pri full" target="_blank" rel="noopener" href="https://wa.me/${wan(l.phone)}">💬 וואטסאפ</a>
+  <button class="btn full" onclick="openL('${id}')">כרטיס ליד מלא</button>
+  <button class="btn full" onclick="if(confirm('להחזיר ללידים (אימון בפועל)?'))setSt('${id}','attended')">החזרה ללידים</button>`)}
+function custHtml(){const n=L.filter(l=>l.stage==='closed').length;
+  return `<h1>לקוחות (${n})</h1><p class="mut">כל ליד שנסגר הופך אוטומטית ללקוח. החזרת הסטטוס ללא-סגירה מחזירה אותו ללידים.</p><input id="cq" placeholder="חיפוש לקוח" value="${esc(cq)}" oninput="cq=this.value;cl()"><div id="cl" class="cards" style="margin-top:10px"></div>`}
+function cl(){const s=cq.trim().toLowerCase(),el=$('#cl');if(!el)return;
+  const R=L.filter(l=>l.stage==='closed'&&(!s||(l.name||'').toLowerCase().includes(s)||ph(l.phone).includes(s.replace(/\D/g,'')||'§'))).sort((a,b)=>closedOn(b).localeCompare(closedOn(a)));
+  el.innerHTML=R.length?R.map(l=>{const d=Math.max(0,Math.round((new Date(closedOn(l))-new Date(l.date))/864e5))||0;
+    return `<div class="card lead" onclick="openC('${l.id}')"><div style="flex:1"><div class="nm">${esc(l.name)}</div><div class="mut">📞 ${esc(l.phone)}</div><div class="mut">לקוח מאז ${fd(closedOn(l))} · נסגר אחרי ${d} ימים</div>${l.src?`<div class="mut">${esc(l.src)}</div>`:''}</div><span class="tag won">לקוח</span></div>`}).join(''):'<div class="empty">עדיין אין לקוחות</div>'}
+
+// ---- settings: fields
+function fieldsM(){go('settings')}
+function addF(){const name=$('#fn').value.trim(),type=$('#ft').value,opts=$('#fo').value.split(',').map(x=>x.trim()).filter(Boolean);
+  if(!name){alert('חסר שם לשדה');return}
+  if(RES.includes(name)||F.some(f=>f.name===name)){alert('כבר יש שדה או משתנה בשם הזה');return}
+  if(type==='choice'&&opts.length<2){alert('לבחירה צריך לפחות שתי אפשרויות');return}
+  F.push({id:uid(),name,type,opts:type==='choice'?opts:[]});saveF()}
+function delF(id){const f=F.find(x=>x.id===id);if(!f)return;const k=L.filter(l=>l.cf&&l.cf[id]!==undefined).length;
+  if(!confirm('למחוק את השדה "'+f.name+'"? הערכים שלו יימחקו מ-'+k+' לידים. אי אפשר לבטל.'))return;
+  L=L.map(l=>{if(!l.cf||l.cf[id]===undefined)return l;const cf={...l.cf};delete cf[id];const n={...l,cf};if(db){const{id:i,...r}=n;db.collection('leads').doc(i).set(r).catch(()=>{})}return n});
+  if(!db)try{localStorage.setItem(LS,JSON.stringify(L))}catch(e){}
+  F=F.filter(x=>x.id!==id);saveF()}
+function mvF(id,d){const i=F.findIndex(x=>x.id===id),j=i+d;if(i<0||j<0||j>=F.length)return;[F[i],F[j]]=[F[j],F[i]];saveF();aud('שינוי סדר שדות')}
+function editF(id){const f=F.find(x=>x.id===id),n=prompt('שם השדה',f.name);if(n===null)return;const nm=n.trim();if(!nm)return;
+  if(RES.includes(nm)||F.some(x=>x.id!==id&&x.name===nm)){alert('השם תפוס');return}f.name=nm;
+  if(f.type==='choice'){const o=prompt('אפשרויות מופרדות בפסיקים',(f.opts||[]).join(', '));
+    if(o!==null){const a=o.split(',').map(x=>x.trim()).filter(Boolean);if(a.length>=2)f.opts=a;else alert('נדרשות לפחות שתי אפשרויות, האפשרויות לא שונו')}}
+  saveF()}
+// ---- settings: heat
+async function saveH(){const h=+$('#hh').value,w=+$('#hw').value;if(!(h>=1&&w>h)){alert('ימי "פושר" חייבים להיות גדולים מימי "חם"');return}
+  H={hot:h,warm:w};try{localStorage.setItem('sb_heat',JSON.stringify(H))}catch(e){}
+  if(sb&&ME){const{error}=await sb.from('orgs').update({heat:H}).eq('id',ME.org);if(error){alert('השמירה נכשלה: '+error.message);return}aud('שינוי הגדרות חום',null,`חם עד ${h}, פושר עד ${w}`)}
+  draw()}
+// ---- settings: message template
+function insPh(k){const t=$('#tp');if(!t||t.disabled)return;const a=t.selectionStart,b=t.selectionEnd,s='{'+k+'}';
+  t.value=t.value.slice(0,a)+s+t.value.slice(b);t.focus();t.selectionStart=t.selectionEnd=a+s.length;tplDraft=t.value;tpv()}
+function tpv(){const t=$('#tp'),p=$('#tpp');if(!t||!p)return;const s=$('#tpl'),l=s&&s.value?L.find(x=>x.id===s.value):null;
+  p.textContent=fillTpl(t.value,l||{name:'דנה',phone:'0501234567',date:lc(),tDate:lc(),tTime:'19:30',src:'וואטסאפ',cf:{}})}
+async function saveTpl(){TPL=$('#tp').value.trim()||DEFTPL;tplDraft=null;try{localStorage.setItem('sb_tpl',TPL)}catch(e){}
+  if(sb&&ME){const{error}=await sb.from('orgs').update({msg:TPL}).eq('id',ME.org);if(error){alert('השמירה נכשלה: '+error.message);return}aud('עדכון תבנית הודעה')}
+  alert('התבנית נשמרה');draw()}
+function resetTpl(){if(!confirm('לשחזר את נוסח ההודעה המקורי?'))return;tplDraft=DEFTPL;draw()}
+
+function setHtml(){
+  const can=!sb||(ME&&ME.role!=='member'),dis=can?'':'disabled',nl=L.length,hc=k=>L.filter(l=>hk(l)===k).length;
+  const stt=f=>{const v=L.map(l=>(l.cf||{})[f.id]).filter(x=>x!==undefined&&x!=='');let e='';
+    if(f.type==='choice'){const m={};v.forEach(x=>m[x]=(m[x]||0)+1);e=' · '+Object.entries(m).map(([a,b])=>esc(a)+' '+b).join(', ')}
+    return `מולא ב-${v.length} מתוך ${nl}${e}`};
+  const PH=[...RES,...F.map(f=>f.name)],sel=L.slice().sort(byD).slice(0,100);
+  return `<h1>שדות והגדרות</h1><div class="cards set" style="margin-top:8px">
+  <div class="card"><h2>🪪 כרטיס ליד</h2><div class="mut">שדות החובה קבועים. שדות נוספים מופיעים בכרטיס הליד, בליד חדש ובטבלה לפי הסדר כאן.</div>
+    <input id="fn" placeholder="שם שדה חדש (למשל: גיל)"><div class="g"><select id="ft"><option value="text">טקסט</option><option value="number">מספר</option><option value="date">תאריך</option><option value="choice">בחירה מרשימה</option></select><button class="btn pri" style="margin-top:8px" onclick="addF()">+ הוספה</button></div>
+    <input id="fo" placeholder="לבחירה מרשימה: אפשרויות מופרדות בפסיקים">
+    <div class="card" style="margin:12px 0 0;padding:12px"><div style="display:flex;flex-wrap:wrap;gap:6px"><span class="tag">🔒 שם</span><span class="tag">🔒 תאריך ליד</span><span class="tag">🔒 טלפון</span><span class="tag">🔒 שלב</span></div>
+    ${F.map((f,i)=>`<div class="row fr"><span style="flex:1"><b>${esc(f.name)}</b> <span class="mut">${TY[f.type]}</span><div class="mut">${stt(f)}</div></span><span style="white-space:nowrap"><button class="btn sm" ${i?'':'disabled'} onclick="mvF('${f.id}',-1)">▲</button> <button class="btn sm" ${i<F.length-1?'':'disabled'} onclick="mvF('${f.id}',1)">▼</button> <button class="btn sm" onclick="editF('${f.id}')">✎</button> <button class="btn sm" style="color:var(--bad)" onclick="delF('${f.id}')">🗑</button></span></div>`).join('')||'<div class="fr mut">עדיין אין שדות נוספים.</div>'}
+    <div class="fr mut">קבועים בכרטיס: מקור · תיעוד שיחה · שיעור ניסיון</div></div></div>
+  <div class="card"><h2>🌡 חום ליד</h2><div class="mut">לפי ימים מהפעילות האחרונה. סגירה חיובית, הופכת ללקוח ולא מתקררת.</div>
+    <div class="g"><div><div class="mut">🔥 חם: עד (ימים)</div><input id="hh" type="number" min="1" value="${H.hot}" ${dis}></div><div><div class="mut">🌤 פושר: עד (ימים)</div><input id="hw" type="number" min="2" value="${H.warm}" ${dis}></div></div>
+    <div class="mut" style="margin-top:8px">❄️ קר: מעל זה. כרגע: 🔥 ${hc('hot')} · 🌤 ${hc('warm')} · ❄️ ${hc('cold')}</div>${can?'<button class="btn pri full" onclick="saveH()">שמירה</button>':''}</div>
+  <div class="card"><h2>💬 הודעת הזמנה לשיעור ניסיון</h2><div class="mut">לחיצה על משתנה מכניסה אותו להודעה, והוא מתמלא מנתוני הליד (חסר = __).</div>
+    <div class="chips" style="flex-wrap:wrap;margin-top:8px">${PH.map(k=>`<button class="chip" data-k="${esc(k)}" onclick="insPh(this.dataset.k)">{${esc(k)}}</button>`).join('')}</div>
+    <textarea id="tp" rows="14" oninput="tplDraft=this.value;tpv()" ${dis}>${esc(tplDraft??TPL)}</textarea>
+    <div class="mut" style="margin-top:8px">תצוגה מקדימה על:</div><select id="tpl" onchange="tpv()"><option value="">דוגמה</option>${sel.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select>
+    <pre class="pv" id="tpp"></pre>${can?'<button class="btn pri full" onclick="saveTpl()">שמירת התבנית</button><button class="btn full" onclick="resetTpl()">שחזור נוסח מקורי</button>':''}</div></div>`}
+
+// ---- navigation + page routing
+function sideHtml(){const tn=tasks().reduce((a,g)=>a+g.arr.length,0),adm=sb&&ME&&ME.role!=='member',nc=L.filter(l=>l.stage==='closed').length;
+  const nv=(k,i,t,b)=>`<button class="nv ${page===k?'on':''}" onclick="go('${k}')"><span>${i}</span>${t}${b?` <span class="tag">${b}</span>`:''}</button>`;
+  return `<aside class="side"><div class="brand">Studio Balance</div>${nv('tasks','✅','משימות',tn)}${nv('fall','📊','מפל')}${nv('leads','👥','לידים')}${nv('customers','🤝','לקוחות',nc)}${nv('settings','⚙','שדות')}<button class="nv" onclick="impM()"><span>⬆</span>ייבוא</button><button class="nv" onclick="exportCSV()"><span>⬇</span>ייצוא</button>${adm?nv('users','👤','משתמשים')+nv('audit','🕘','יומן'):''}${sb?'<button class="nv" onclick="logout()"><span>⎋</span>יציאה</button>':''}<div class="mut st">${mode==='db'?'✓ נשמר במסד נתונים':mode==='local'?'נשמר רק במכשיר הזה':mode==='err'?'שגיאת חיבור':'מתחבר…'}</div></aside>`}
+const _dr=draw;
+draw=function(){
+  const a=document.activeElement,real=page,ex=real==='customers'||real==='settings';
+  if(real==='settings'&&draw.p==='settings'&&a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&a.closest('.main'))return; // don't wipe unsaved typing
+  if(real==='customers'&&draw.p==='customers'&&a&&a.id==='cq'){cl();return}
+  const pv=draw.p===real?document.querySelector('.main .cards'):null,sc=pv?pv.scrollTop:0;
+  if(ex)page='tasks';
+  try{_dr()}finally{page=real}
+  const sd=document.querySelector('.side');if(sd)sd.outerHTML=sideHtml();
+  if(ex){document.querySelector('.main').innerHTML=real==='customers'?custHtml():setHtml();
+    if(real==='customers')cl();else tpv();
+    if(sc){const n=document.querySelector('.main .cards');if(n)n.scrollTop=sc}}
+  draw.p=real};
 init();draw();
+  
 </script>
 </body></html>
