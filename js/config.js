@@ -1,7 +1,7 @@
 /* ===== config: keys + constants (edit here) ===== */
 const VERSION='1.2.1';
 // Supabase -> Project Settings -> API. anon/publishable key ONLY, never service_role.
-const SUPABASE_URL='',SUPABASE_ANON_KEY='';
+const SUPABASE_URL='https://wrpwwndetbucdrlukhkr.supabase.co',SUPABASE_ANON_KEY='sb_publishable_2GK_tLuZRP03MnEb_Vb0iQ_jiJQ0Y5c';
 
 // lead stages
 const ST=[['new','ליד חדש'],['phone','שיחת טלפון'],['booked','אימון מתואם'],['attended','אימון בפועל'],['closed','סגירה'],['lost','כשלון'],['followup','צריך לחזור'],['dead','ליד שמת']];
